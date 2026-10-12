@@ -5,7 +5,7 @@ import { useI18n } from './i18n';
 import type { DebateConfig } from './model/config';
 import type { Locale } from './model/locale';
 import { defaultConfig } from './model/presets';
-import { currentDebate, reducer, type AppState } from './model/reducer';
+import { anyRunning, currentDebate, reducer, type AppState } from './model/reducer';
 import { loadState, saveState } from './model/storage';
 import { useConfigEditor } from './setup/configEditor';
 import { SetupScreen, type SetupTab } from './setup/SetupScreen';
@@ -38,9 +38,32 @@ export function App() {
 
   // Everything is kept in this browser as it changes; the setup keeps the
   // labels it was made with, whatever the UI language becomes.
+  const latest = useRef(state);
   useEffect(() => {
+    latest.current = state;
     saveState(browserStorage, state, performance.now());
   }, [state]);
+
+  // A running clock changes the time, not the state, so while one runs the
+  // state is also kept every second, and when the page is hidden or left: a
+  // reload brings the clocks back paused at the time they had. Only then;
+  // otherwise what is stored is up to date already.
+  const running = anyRunning(state);
+  useEffect(() => {
+    if (!running) return;
+    const save = () => saveState(browserStorage, latest.current, performance.now());
+    const onHidden = () => {
+      if (document.visibilityState === 'hidden') save();
+    };
+    window.addEventListener('pagehide', save);
+    document.addEventListener('visibilitychange', onHidden);
+    const id = window.setInterval(save, 1000);
+    return () => {
+      window.removeEventListener('pagehide', save);
+      document.removeEventListener('visibilitychange', onHidden);
+      window.clearInterval(id);
+    };
+  }, [running]);
 
   // Once a shared setup is used or not, reading starts at the top of the
   // screen that comes back (the debate screen sees to its own).
@@ -60,6 +83,13 @@ export function App() {
     setTab('topics');
     setLeftDebate(null);
     close();
+  };
+
+  // Back on the debates, on the Start button of the debate just left.
+  const leave = (debateId: string, type: 'close-debate' | 'finish-debate') => {
+    setTab('debates');
+    setLeftDebate(debateId);
+    dispatch({ type, now: performance.now() });
   };
 
   const open = currentDebate(state);
@@ -86,11 +116,9 @@ export function App() {
         <DebateScreen
           state={state}
           open={open}
-          onBack={() => {
-            setTab('debates');
-            setLeftDebate(open.debate.id);
-            dispatch({ type: 'close-debate', now: performance.now() });
-          }}
+          dispatch={dispatch}
+          onBack={() => leave(open.debate.id, 'close-debate')}
+          onFinish={() => leave(open.debate.id, 'finish-debate')}
         />
       )}
     </>

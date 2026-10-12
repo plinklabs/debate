@@ -6,7 +6,9 @@ import {
   countdown,
   elapsedMs,
   formatClock,
+  formatCountdown,
   isRunning,
+  msToNextSecond,
   pauseTimer,
   startTimer,
   timingOf,
@@ -54,6 +56,33 @@ describe('countdown', () => {
     expect(formatClock(90)).toBe('1:30');
     expect(formatClock(605.7)).toBe('10:05');
     expect(formatClock(-3)).toBe('0:00');
+  });
+
+  it('shows the time left, 0:00 when time runs out, and the overtime with a plus', () => {
+    expect(formatCountdown(countdown(90, 0))).toBe('1:30');
+    expect(formatCountdown(countdown(60, 59_001))).toBe('0:01');
+    expect(formatCountdown(countdown(60, 60_000))).toBe('0:00');
+    expect(formatCountdown(countdown(60, 60_999))).toBe('0:00');
+    expect(formatCountdown(countdown(60, 72_900))).toBe('+0:12');
+    expect(formatCountdown(countdown(30, 30_000 + 75_000))).toBe('+1:15');
+  });
+});
+
+describe('msToNextSecond', () => {
+  it('is the time until the countdown shows another second', () => {
+    expect(msToNextSecond(0)).toBe(1000);
+    expect(msToNextSecond(250)).toBe(750);
+    expect(msToNextSecond(59_999)).toBe(1);
+    expect(msToNextSecond(60_000)).toBe(1000);
+  });
+
+  it('lands on the moment the display changes, before time is up and after', () => {
+    for (const elapsed of [0, 1, 999, 1000, 41_234, 59_999.5, 60_000, 72_345.25]) {
+      const later = elapsed + msToNextSecond(elapsed);
+      const shown = formatCountdown(countdown(60, elapsed));
+      expect(formatCountdown(countdown(60, later))).not.toBe(shown);
+      expect(formatCountdown(countdown(60, later - 0.5))).toBe(shown);
+    }
   });
 });
 

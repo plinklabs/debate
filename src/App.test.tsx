@@ -1,5 +1,5 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { setStepSeconds, setTopicText } from './model/edit';
 import { GRAFFITI_PRESET } from './model/presets';
@@ -117,8 +117,8 @@ describe('App', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(topic);
     expect(screen.getByRole('heading', { level: 1 })).toHaveFocus();
     expect(screen.getByText('// Debate 1')).toBeInTheDocument();
-    expect(screen.getByText('Ann, Bert')).toBeInTheDocument();
-    expect(screen.getByText('Dirk, Eva')).toBeInTheDocument();
+    // At its first step: the vote before.
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Vote before');
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
     expect(stored().session.current).toBe('d1');
     first.unmount();
@@ -142,6 +142,94 @@ describe('App', () => {
     fireEvent.keyDown(tab('Format'), { key: 'ArrowRight' });
     expect(tab('Debates and teams')).toHaveAttribute('aria-selected', 'true');
     expect(tab('Debates and teams')).toHaveFocus();
+  });
+
+  it('finishes a debate at its last step and comes back to it in the list', () => {
+    storeReadyDebate();
+    renderWithI18n(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Step 10: Vote after' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Finish debate' }));
+
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Debate — by Plink Labs');
+    expect(screen.getByRole('tab', { name: 'Debates and teams' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    const debate = screen.getByRole('article', { name: 'Debate 1' });
+    expect(within(debate).getByText('Finished')).toBeInTheDocument();
+    expect(within(debate).getByRole('button', { name: 'Open' })).toHaveFocus();
+    expect(stored().session).toMatchObject({ current: null, debates: [{ done: true }] });
+  });
+});
+
+describe('a running clock in the app', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** The open debate at its first speech, its clock started, after `seconds`. */
+  function runOpening(seconds: number) {
+    vi.useFakeTimers({
+      toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'performance', 'Date'],
+    });
+    storeReadyDebate();
+    const view = renderWithI18n(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Step 2: Opening (FOR)' }));
+    fireEvent.keyDown(document.body, { key: ' ' });
+    for (let ms = 0; ms < seconds * 1000; ms += 100) {
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+    }
+    return view;
+  }
+
+  const openingTimer = () => stored().session.debates[0].records['opening-pro'].timer;
+
+  it('is kept while it runs, and comes back paused at its time after a reload', () => {
+    const first = runOpening(30);
+    expect(screen.getByRole('timer', { name: 'Time' })).toHaveTextContent('0:30');
+    expect(openingTimer()).toEqual({ accMs: 30_000, since: null });
+    // The tab is gone without a word: what was kept last comes back.
+    first.unmount();
+
+    renderWithI18n(<App />);
+    expect(screen.getByRole('timer', { name: 'Time' })).toHaveTextContent('0:30');
+    expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(screen.getByRole('timer', { name: 'Time' })).toHaveTextContent('0:30');
+  });
+
+  it('is kept at the moment the page is left or hidden', () => {
+    runOpening(12.4);
+    expect(openingTimer().accMs).toBe(12_000);
+    act(() => {
+      window.dispatchEvent(new Event('pagehide'));
+    });
+    expect(openingTimer().accMs).toBe(12_400);
+
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    visibility.mockRestore();
+    expect(openingTimer().accMs).toBe(12_700);
+  });
+
+  it('leaves what is stored alone when the page is left with no clock running', () => {
+    storeReadyDebate();
+    renderWithI18n(<App />);
+    // Another tab of the app stored something since.
+    localStorage.setItem(STORAGE_KEY, 'from another tab');
+    window.dispatchEvent(new Event('pagehide'));
+    expect(localStorage.getItem(STORAGE_KEY)).toBe('from another tab');
   });
 });
 

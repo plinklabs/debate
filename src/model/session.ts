@@ -253,6 +253,40 @@ export function debateRunning(debate: Debate): boolean {
   return Object.values(debate.records).some(recordRunning);
 }
 
+/** A clock of a timed step. */
+export interface StepClock {
+  /** The team whose clock this is in a free round; `null` for the one clock of any other step. */
+  readonly side: Side | null;
+  /** Planned seconds on this clock. */
+  readonly seconds: number;
+  readonly timer: Timer;
+}
+
+/**
+ * The clocks of a step in this debate: one for a speech or a consultation, one
+ * per team in a free round (a chess clock), none for a vote. At most one of
+ * them runs.
+ */
+export function clocksOf(debate: Debate, step: Step): readonly StepClock[] {
+  switch (step.type) {
+    case 'speech':
+    case 'consultation':
+      return [{ side: null, seconds: step.seconds, timer: recordFor(debate, step).timer }];
+    case 'free-round': {
+      const { clocks } = recordFor(debate, step);
+      return SIDES.map((side) => ({ side, seconds: step.seconds, timer: clocks[side] }));
+    }
+    case 'vote-before':
+    case 'vote-after':
+      return [];
+  }
+}
+
+/** The clock of this step that runs now, or `null`. */
+export function runningClock(debate: Debate, step: Step): StepClock | null {
+  return clocksOf(debate, step).find((clock) => isRunning(clock.timer)) ?? null;
+}
+
 /** Stop whatever runs in this debate. */
 export function pauseDebate(debate: Debate, now: number): Debate {
   if (!debateRunning(debate)) return debate;

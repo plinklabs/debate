@@ -52,6 +52,22 @@ export function formatClock(totalSeconds: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
+/** A countdown as the clock shows it: `1:30` while time is left, `0:00` when it runs out, `+0:12` over time. */
+export function formatCountdown(clock: Countdown): string {
+  return clock.over && clock.seconds > 0
+    ? `+${formatClock(clock.seconds)}`
+    : formatClock(clock.seconds);
+}
+
+/**
+ * Milliseconds until a clock that has run `elapsed` ms shows another second.
+ * A countdown of whole planned seconds changes on every whole second of
+ * elapsed time, before time is up and after; a screen repaints then.
+ */
+export function msToNextSecond(elapsed: number): number {
+  return 1000 - (((elapsed % 1000) + 1000) % 1000);
+}
+
 /** What gets recorded for a timed turn, in whole seconds. */
 export interface Timing {
   readonly planned: number;

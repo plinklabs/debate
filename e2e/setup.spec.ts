@@ -215,8 +215,11 @@ test.describe('in an English browser', () => {
     await tab(page, 'Debatten en teams').click();
     await start.click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(TOPIC);
-    await expect(page.getByText('Ann, Bert, Cas')).toBeVisible();
-    await expect(page.getByText('Dirk, Eva')).toBeVisible();
+    // At the first step of the format that was built: the vote before.
+    await expect(
+      page.getByRole('navigation', { name: 'Stappen' }).locator('[aria-current="step"]'),
+    ).toHaveAccessibleName('Stap 1: Stemming vooraf');
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText('Stemming vooraf');
     await expectFits(page);
     expect((await stored(page)).session.current).toBe('d1');
 

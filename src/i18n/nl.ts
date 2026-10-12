@@ -9,6 +9,14 @@ import type { IssueMessages, StepTypeNames } from './types';
 
 const n = (value: number) => formatNumber('nl', value);
 
+/** With its sign, `+3` or `-1,5`, and no sign for 0. */
+const signed = (value: number, digits = 0) =>
+  formatNumber('nl', value, { maximumFractionDigits: digits, signDisplay: 'exceptZero' });
+
+/** 1 or −1 as shown with `digits` decimals: the singular. */
+const isOne = (value: number, digits = 0) =>
+  Math.abs(Math.round(value * 10 ** digits) / 10 ** digits) === 1;
+
 const stepTypes: StepTypeNames = {
   'stepType.speech': 'Spreekbeurt',
   'stepType.consultation': 'Overleg',
@@ -187,9 +195,48 @@ export const nl: Dictionary = {
   'preview.place.version': 'Versie',
   'preview.close': 'Verder naar de app',
 
-  'debate.pending':
-    'Het debatscherm is nog in aanbouw. Het toont straks de stappen, een grote klok en de stemming.',
   'debate.back': 'Terug naar de opzet',
+  'debate.sound': 'Geluid',
+  'debate.sound.on': 'aan',
+  'debate.sound.off': 'uit',
+  'debate.steps': 'Stappen',
+  'debate.stepName': ({ number, name, side }) =>
+    `Stap ${n(number)}: ${name}${side === null ? '' : ` (${side})`}`,
+  'debate.stepOf': ({ number, total }) => `Stap ${n(number)} van ${n(total)}`,
+  'debate.who.both': 'Beide teams',
+  'debate.who.audience': 'Het publiek',
+  'debate.floor': ({ name }) => `${name} heeft het woord`,
+  'debate.tapSpeaker': 'Tik op wie spreekt.',
+  'debate.tapFreeRound': 'Tik op een naam: de klok van dat team loopt.',
+  'debate.consult': 'Beide teams overleggen.',
+  'debate.clock': 'Tijd',
+  'debate.of': ({ time }) => `van ${time}`,
+  'debate.paused': 'Gepauzeerd',
+  'debate.overtime': 'Overtijd',
+  'debate.timeUp': 'De tijd is om.',
+  'debate.speakers': 'Sprak in deze beurt',
+  'debate.removeSpeaker': ({ name }) => `${name} schrappen als spreker`,
+  'debate.turns': ({ count }) => (count === 1 ? '1 beurt' : `${n(count)} beurten`),
+  'debate.fewerTurns': ({ name }) => `Eén beurt minder voor ${name}`,
+  'debate.vote.prompt': 'Wie is het eens met de stelling? Tel de handen.',
+  'debate.vote.count': ({ side }) => `Stemmen ${side}`,
+  'debate.vote.fewer': ({ side }) => `Eén stem minder voor ${side}`,
+  'debate.vote.more': ({ side }) => `Eén stem meer voor ${side}`,
+  'debate.vote.before': 'Vooraf',
+  'debate.vote.after': 'Achteraf',
+  'debate.shift': ({ points, side }) =>
+    `Verschuiving naar ${side}: ${signed(points, 1)} ${isOne(points, 1) ? 'procentpunt' : 'procentpunten'}`,
+  'debate.shift.votes': ({ count }) => `${signed(count)} ${isOne(count) ? 'stem' : 'stemmen'}`,
+  'debate.shift.none': 'Nog geen verschuiving: elke stemming heeft minstens één hand nodig.',
+  'debate.start': 'Starten',
+  'debate.pause': 'Pauzeren',
+  'debate.previous': 'Vorige stap',
+  'debate.next': 'Volgende stap',
+  'debate.finish': 'Debat afsluiten',
+  'debate.keys': 'Spatie: start of pauze · ← →: vorige of volgende stap',
+  'debate.clear': 'Stap wissen',
+  'debate.clear.question': 'De tijd, de sprekers of de stemmen van deze stap wissen?',
+  'debate.clear.confirm': 'Wissen',
 
   ...stepTypes,
   ...issues,

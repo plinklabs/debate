@@ -11,6 +11,14 @@ import type { IssueMessages, Message, StepTypeNames } from './types';
 
 const n = (value: number) => formatNumber('en', value);
 
+/** With its sign, `+3` or `-1.5`, and no sign for 0. */
+const signed = (value: number, digits = 0) =>
+  formatNumber('en', value, { maximumFractionDigits: digits, signDisplay: 'exceptZero' });
+
+/** 1 or −1 as shown with `digits` decimals: the singular. */
+const isOne = (value: number, digits = 0) =>
+  Math.abs(Math.round(value * 10 ** digits) / 10 ** digits) === 1;
+
 const stepTypes: StepTypeNames = {
   'stepType.speech': 'Speech',
   'stepType.consultation': 'Consultation',
@@ -200,10 +208,59 @@ export const en = {
   'preview.place.version': 'Version',
   'preview.close': 'Continue to the app',
 
-  // The debate screen, a placeholder until #6.
-  'debate.pending':
-    'The debate screen is still being built. It will show the steps, a large timer and the vote.',
+  // The debate screen, on the projector: the steps, a large clock, who has
+  // the floor, and the audience vote.
   'debate.back': 'Back to the setup',
+  'debate.sound': 'Sound',
+  'debate.sound.on': 'on',
+  'debate.sound.off': 'off',
+  'debate.steps': 'Steps',
+  'debate.stepName': ({
+    number,
+    name,
+    side,
+  }: {
+    number: number;
+    name: string;
+    side: string | null;
+  }) => `Step ${n(number)}: ${name}${side === null ? '' : ` (${side})`}`,
+  'debate.stepOf': ({ number, total }: { number: number; total: number }) =>
+    `Step ${n(number)} of ${n(total)}`,
+  'debate.who.both': 'Both teams',
+  'debate.who.audience': 'The audience',
+  'debate.floor': ({ name }: { name: string }) => `${name} has the floor`,
+  'debate.tapSpeaker': 'Tap the student who speaks.',
+  'debate.tapFreeRound': 'Tap a name: that team’s clock runs.',
+  'debate.consult': 'Both teams prepare.',
+  'debate.clock': 'Time',
+  'debate.of': ({ time }: { time: string }) => `of ${time}`,
+  'debate.paused': 'Paused',
+  'debate.overtime': 'Overtime',
+  'debate.timeUp': 'Time is up.',
+  'debate.speakers': 'Spoke this turn',
+  'debate.removeSpeaker': ({ name }: { name: string }) => `Remove ${name} from the speakers`,
+  'debate.turns': ({ count }: { count: number }) => (count === 1 ? '1 turn' : `${n(count)} turns`),
+  'debate.fewerTurns': ({ name }: { name: string }) => `One turn fewer for ${name}`,
+  'debate.vote.prompt': 'Who agrees with the topic? Count the hands.',
+  'debate.vote.count': ({ side }: { side: string }) => `Votes ${side}`,
+  'debate.vote.fewer': ({ side }: { side: string }) => `One vote fewer for ${side}`,
+  'debate.vote.more': ({ side }: { side: string }) => `One vote more for ${side}`,
+  'debate.vote.before': 'Before',
+  'debate.vote.after': 'After',
+  'debate.shift': ({ points, side }: { points: number; side: string }) =>
+    `Shift towards ${side}: ${signed(points, 1)} ${isOne(points, 1) ? 'percentage point' : 'percentage points'}`,
+  'debate.shift.votes': ({ count }: { count: number }) =>
+    `${signed(count)} ${isOne(count) ? 'vote' : 'votes'}`,
+  'debate.shift.none': 'No shift yet: each vote needs at least one hand.',
+  'debate.start': 'Start',
+  'debate.pause': 'Pause',
+  'debate.previous': 'Previous step',
+  'debate.next': 'Next step',
+  'debate.finish': 'Finish debate',
+  'debate.keys': 'Space: start or pause · ← →: previous or next step',
+  'debate.clear': 'Clear step',
+  'debate.clear.question': 'Clear the time, the speakers or the votes of this step?',
+  'debate.clear.confirm': 'Clear',
 
   ...stepTypes,
   ...issues,

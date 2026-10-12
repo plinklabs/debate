@@ -1,0 +1,667 @@
+/* The debate screen, on the projector: readable from the back of a classroom
+   at 1280×720, and still usable on a phone. The stage, with the clock, is the
+   page's one full-bleed ink section; magenta only on the Start button, the
+   ping of a running clock, a clock over time and the time-up signal. */
+
+.inner {
+  max-width: var(--container);
+  margin: 0 auto;
+  padding-inline: var(--gutter);
+}
+
+/* ── head: the debate, its topic and its steps ─────────── */
+
+.head {
+  padding-top: var(--space-3);
+}
+
+.topline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 var(--space-4);
+}
+
+.eyebrow {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.tools {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0 var(--space-1);
+  margin-right: calc(-1 * var(--space-2));
+}
+
+.topic {
+  max-width: 48ch;
+  margin: var(--space-1) 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.375rem, 0.9rem + 1.1vw, 2.4rem);
+  font-weight: var(--display-weight);
+  line-height: 1.08;
+  letter-spacing: var(--display-tracking);
+  overflow-wrap: anywhere;
+}
+
+/* Focused by script when the screen opens, not by the keyboard. */
+.topic:focus {
+  outline: none;
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
+  gap: var(--space-2);
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stepButton {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 2.75rem;
+  margin: 0;
+  padding: var(--space-1) 0 0;
+  border: 0;
+  border-top: 3px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard);
+}
+
+.stepButton:hover {
+  color: var(--text);
+}
+
+.past .stepButton {
+  border-top-color: var(--ink-60);
+}
+
+.current .stepButton {
+  border-top-color: var(--ink);
+  color: var(--text);
+}
+
+.stepNumber {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  letter-spacing: var(--label-tracking-tight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stepLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.current .stepLabel {
+  font-weight: var(--body-weight-strong);
+}
+
+/* ── the stage: the current step, on ink ───────────────── */
+
+.stage {
+  position: relative;
+  margin-top: var(--space-4);
+  background: var(--surface-ink);
+  color: var(--on-ink);
+}
+
+.stage :focus-visible {
+  outline-color: var(--magenta-on-dark);
+}
+
+.stageInner {
+  padding-block: var(--space-4);
+}
+
+.stageEyebrow {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--on-ink-muted);
+}
+
+.stepTitle {
+  margin: var(--space-1) 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.875rem, 1.3rem + 1.8vw, 3.4rem);
+  font-weight: var(--display-weight);
+  line-height: var(--display-2-lh);
+  letter-spacing: var(--display-tracking);
+  overflow-wrap: anywhere;
+}
+
+/* The clock on the left, who has the floor on the right. */
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: end;
+  gap: var(--space-4) var(--space-7);
+  margin-top: var(--space-3);
+}
+
+@media (min-width: 900px) {
+  .split {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  }
+}
+
+/* ── clocks ────────────────────────────────────────────── */
+
+.countdown {
+  min-width: 0;
+}
+
+.digits {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-weight: var(--label-weight-strong);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  white-space: nowrap;
+}
+
+.large .digits {
+  font-size: clamp(4.5rem, min(19vw, 27vh), 15rem);
+}
+
+.medium .digits {
+  font-size: clamp(3.5rem, min(7vw, 13vh), 8rem);
+}
+
+.over .digits {
+  color: var(--magenta-on-dark);
+}
+
+.clockNote {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--on-ink-muted);
+}
+
+.over .clockNote {
+  color: var(--on-ink);
+}
+
+/* The ping holds its place while the clock stands still. */
+.idle {
+  visibility: hidden;
+}
+
+/* When time is up: the stage flashes a magenta frame, or, without motion,
+   shows it for as long as the signal lasts. */
+.signal {
+  position: absolute;
+  inset: 0;
+  border: 6px solid var(--magenta-on-dark);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .signal {
+    animation: signal 3s var(--ease-standard) forwards;
+  }
+}
+
+@keyframes signal {
+  0%,
+  30%,
+  60% {
+    opacity: 1;
+  }
+
+  15%,
+  45% {
+    opacity: 0.15;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ── who has the floor ─────────────────────────────────── */
+
+.floor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  padding-bottom: var(--space-2);
+}
+
+.floorLine {
+  margin: var(--space-2) 0 0;
+  font-size: clamp(1.25rem, 1rem + 0.7vw, 1.75rem);
+  line-height: 1.2;
+}
+
+.floor .floorLine {
+  margin: 0;
+}
+
+.names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.name {
+  appearance: none;
+  min-height: 3rem;
+  margin: 0;
+  padding: 0.55rem 1.1rem;
+  border: var(--border-width) solid var(--on-ink-muted);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--on-ink);
+  font-family: var(--font-body);
+  font-size: clamp(1.125rem, 0.95rem + 0.5vw, 1.375rem);
+  font-weight: var(--body-weight-strong);
+  line-height: 1.1;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard),
+    transform var(--dur-fast) var(--ease-standard);
+}
+
+.name:hover {
+  border-color: var(--on-ink);
+}
+
+.name:active {
+  transform: translateY(0.5px) scale(0.985);
+}
+
+/* Has the floor. */
+.name[aria-pressed='true'] {
+  border-color: var(--on-ink);
+  background: var(--on-ink);
+  color: var(--ink);
+}
+
+/* Small mono buttons on ink: −, +, ×. */
+.inkButton {
+  appearance: none;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  margin: 0;
+  padding: 0 var(--space-2);
+  border: var(--border-width) solid var(--hairline-on-ink);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--on-ink);
+  font-family: var(--font-mono);
+  font-size: var(--text-xl);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.inkButton:hover:not([aria-disabled='true']) {
+  border-color: var(--on-ink);
+}
+
+.inkButton[aria-disabled='true'] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.spoke {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.spokeLabel {
+  margin: 0;
+  font-family: var(--font-mono);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--on-ink-muted);
+}
+
+.spokeList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.spokeName {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* ── the free round: a clock per team ──────────────────── */
+
+.chess {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3) var(--space-4);
+  margin-top: var(--space-2);
+}
+
+@media (min-width: 720px) {
+  .chess {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.team {
+  min-width: 0;
+  padding: var(--space-3) var(--space-3) var(--space-4);
+  border: var(--border-width) solid var(--hairline-on-ink);
+  border-radius: var(--radius);
+  transition: border-color var(--dur-fast) var(--ease-standard);
+}
+
+/* The team whose clock runs. */
+.active {
+  border-color: var(--on-ink);
+  outline: var(--border-width) solid var(--on-ink);
+  outline-offset: -2px;
+}
+
+.teamHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 var(--space-3);
+  margin-bottom: var(--space-1);
+}
+
+.teamMeta {
+  margin: 0;
+  font-family: var(--font-mono);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--on-ink-muted);
+}
+
+.teamName {
+  display: block;
+  margin: 0 0 var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  font-weight: var(--label-weight-strong);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+}
+
+/* The clock, and the names beside it where there is room, else below. */
+.teamBody {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3) var(--space-4);
+}
+
+.turns {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0 0 var(--space-2);
+  list-style: none;
+}
+
+.turn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.turnCount {
+  min-width: 2.5ch;
+  font-family: var(--font-mono);
+  color: var(--on-ink-muted);
+}
+
+/* ── the audience vote ─────────────────────────────────── */
+
+/* The counts, and the shift beside them where there is room. */
+.voteLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-4) var(--space-6);
+  margin-top: var(--space-3);
+}
+
+@media (min-width: 900px) {
+  .voteLayout {
+    grid-template-columns: minmax(0, 34rem) minmax(0, 1fr);
+  }
+}
+
+.votes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3) var(--space-4);
+}
+
+.voteBox {
+  min-width: 0;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border: var(--border-width) solid var(--hairline-on-ink);
+  border-radius: var(--radius);
+}
+
+.voteRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.voteInput {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-bottom: var(--border-width) solid var(--on-ink-muted);
+  border-radius: 0;
+  background: transparent;
+  color: var(--on-ink);
+  font-family: var(--font-mono);
+  font-size: clamp(2.75rem, min(6vw, 11vh), 5rem);
+  font-weight: var(--label-weight-strong);
+  line-height: 1.1;
+  text-align: center;
+  appearance: textfield;
+}
+
+.voteInput::-webkit-inner-spin-button,
+.voteInput::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.share {
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-mono);
+  color: var(--on-ink-muted);
+  text-align: center;
+}
+
+.shift {
+  min-width: 0;
+  padding-top: var(--space-3);
+  border-top: var(--border-width) solid var(--hairline-on-ink);
+}
+
+@media (min-width: 900px) {
+  .shift {
+    padding: 0 0 0 var(--space-5);
+    border-top: 0;
+    border-left: var(--border-width) solid var(--hairline-on-ink);
+  }
+}
+
+.tally {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-6);
+  margin: 0;
+}
+
+.tally dt {
+  font-family: var(--font-mono);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--on-ink-muted);
+}
+
+.tally dd {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.shiftResult {
+  margin: var(--space-3) 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 1.1rem + 1.1vw, 2.4rem);
+  font-weight: var(--display-weight);
+  line-height: 1.1;
+  letter-spacing: var(--display-tracking);
+}
+
+.shiftVotes {
+  font-family: var(--font-body);
+  font-size: var(--text-xl);
+  font-weight: var(--body-weight);
+  letter-spacing: 0;
+  color: var(--on-ink-muted);
+  white-space: nowrap;
+}
+
+/* ── the controls, always in reach ─────────────────────── */
+
+.controls {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  border-top: var(--border-width) solid var(--border);
+  background: var(--surface);
+}
+
+.controlsInner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-5);
+  padding-block: var(--space-3);
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* Start and Pause take the same room, so Next stays put. */
+.toggle {
+  min-width: 7.5rem;
+}
+
+.keys {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  letter-spacing: var(--label-tracking-tight);
+  color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+  .inner {
+    padding-inline: var(--space-4);
+  }
+
+  /* Only the numbers of the steps: the current one is on the stage. */
+  .steps {
+    grid-template-columns: repeat(auto-fill, minmax(2.75rem, 1fr));
+  }
+
+  .stepSide,
+  .stepLabel {
+    display: none;
+  }
+
+  .tools {
+    justify-content: flex-start;
+    margin: 0 0 0 calc(-1 * var(--space-2));
+  }
+
+  /* No keyboard to speak of. */
+  .keys {
+    display: none;
+  }
+
+  /* Previous, Start and Next on one row: the arrows say it, the names are read out. */
+  .buttons {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    width: 100%;
+  }
+
+  .buttonLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .votes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
