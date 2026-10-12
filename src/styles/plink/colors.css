@@ -1,0 +1,48 @@
+/* Plink Labs — colour
+   ink + paper do ~90% of the work. magenta is a SPARK, never a coat of paint:
+   the mark, one highlighted word, the pulse, one primary action. <5% of pixels. */
+
+:root {
+  /* ── base ink + paper ───────────────────────────────── */
+  --ink: #1B1B23;          /* near-black, warm */
+  --paper: #FAF7F2;        /* warm calm paper */
+
+  /* paper tints (for the rare raised surface — flat, never shadowed) */
+  --paper-2: #F3EFE7;      /* slightly deeper paper */
+  --paper-3: #ECE7DC;      /* deepest paper / inset */
+
+  /* ink tints (text + hairlines, all derived from ink) */
+  --ink-80: #3A3A42;
+  --ink-60: #6E6A62;       /* body-muted text on paper */
+  --muted:  #9A958B;       /* captions, labels, disabled */
+  --hairline: rgba(27, 27, 35, 0.14);   /* 1px instrument rules */
+  --hairline-strong: rgba(27, 27, 35, 0.26);
+
+  /* ── the spark ──────────────────────────────────────── */
+  --magenta: #DB2777;          /* on light */
+  --magenta-press: #C01F68;    /* pressed / hover-darken */
+  --magenta-on-dark: #EC4899;  /* on the full-bleed ink section */
+
+  /* ── on-ink (the one full-bleed ink section per page) ── */
+  --on-ink: #FAF7F2;           /* paper-coloured text on ink */
+  --on-ink-muted: #8E8A82;     /* muted text on ink */
+  --hairline-on-ink: rgba(250, 247, 242, 0.16);
+
+  /* ── semantic aliases ───────────────────────────────── */
+  --surface: var(--paper);
+  --surface-raised: var(--paper-2);
+  --surface-inset: var(--paper-3);
+  --surface-ink: var(--ink);
+
+  --text: var(--ink);
+  --text-muted: var(--ink-60);
+  --text-caption: var(--muted);
+
+  --border: var(--hairline);
+  --border-strong: var(--hairline-strong);
+
+  --accent: var(--magenta);
+  --accent-press: var(--magenta-press);
+
+  --focus-ring: var(--magenta);
+}

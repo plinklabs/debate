@@ -1,0 +1,8 @@
+/* Plink Labs design tokens, vendored from plinklabs/plink-design-system
+   at 7db8bcf (tokens/). Replace these files with newer copies rather than
+   editing them here. The webfonts are not imported from Google Fonts as the
+   design system does; ../fonts.css self-hosts them so the app works offline. */
+
+@import './colors.css';
+@import './typography.css';
+@import './spacing.css';

@@ -1,0 +1,12 @@
+/* Self-hosted webfonts (all OFL). Fontsource names the variable builds
+   "<Family> Variable", so the family tokens are redeclared to put those first. */
+
+@import '@fontsource-variable/fraunces/opsz.css';
+@import '@fontsource-variable/hanken-grotesk/index.css';
+@import '@fontsource/space-mono/400.css';
+@import '@fontsource/space-mono/700.css';
+
+:root {
+  --font-display: 'Fraunces Variable', 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-body: 'Hanken Grotesk Variable', 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+}

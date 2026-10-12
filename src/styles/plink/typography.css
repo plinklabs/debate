@@ -1,0 +1,38 @@
+/* Plink Labs — type
+   Display: Fraunces (warm, characterful) · Body: Hanken Grotesk
+   Labels / section numbers / captions / technical microcopy: Space Mono — the "Labs" signature. */
+
+:root {
+  /* ── families ───────────────────────────────────────── */
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-body: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Space Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* ── display scale (Fraunces, optical, tight) ───────── */
+  --display-1: 5.4rem;     /* hero — clamp in use */
+  --display-2: 3.4rem;
+  --display-3: 2.4rem;
+  --display-1-lh: 0.98;  /* @kind other */
+  --display-2-lh: 1.02;  /* @kind other */
+  --display-3-lh: 1.06;  /* @kind other */
+  --display-tracking: -0.018em;
+  --display-weight: 560;   /* Fraunces variable — confident, not heavy */
+
+  /* ── body scale (Hanken Grotesk) ────────────────────── */
+  --text-xl: 1.1875rem;    /* lede / 19px */
+  --text-lg: 1.0625rem;    /* 17px */
+  --text-base: 1rem;       /* 16px — the projector floor */
+  --text-sm: 0.875rem;     /* 14px */
+  --body-lh: 1.5;  /* @kind other */
+  --body-weight: 400;
+  --body-weight-medium: 500;
+  --body-weight-strong: 600;
+
+  /* ── mono scale (Space Mono) — labels & microcopy ───── */
+  --label: 0.75rem;        /* 12px — eyebrows, specs, tags */
+  --label-sm: 0.6875rem;   /* 11px — footnotes, fine print */
+  --label-tracking: 0.14em;       /* uppercase eyebrows */
+  --label-tracking-tight: 0.04em; /* sentence-case mono */
+  --label-weight: 400;
+  --label-weight-strong: 700;
+}

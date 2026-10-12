@@ -1,0 +1,42 @@
+/* Plink Labs — spacing, radius, rhythm
+   A baseline rhythm and crisp geometry. One radius language: crisp ~6px. No soft 16px everywhere. */
+
+:root {
+  /* ── spacing scale (8px base, baseline-friendly) ────── */
+  --space-0: 0;
+  --space-1: 0.25rem;   /* 4 */
+  --space-2: 0.5rem;    /* 8 */
+  --space-3: 0.75rem;   /* 12 */
+  --space-4: 1rem;      /* 16 */
+  --space-5: 1.5rem;    /* 24 */
+  --space-6: 2rem;      /* 32 */
+  --space-7: 3rem;      /* 48 */
+  --space-8: 4rem;      /* 64 */
+  --space-9: 5.25rem;   /* 84 */
+  --space-10: 7rem;     /* 112 */
+
+  /* ── baseline grid ──────────────────────────────────── */
+  --baseline: 0.5rem;   /* 8px — vertical rhythm unit */
+
+  /* ── radius — ONE language: crisp ────────────────────── */
+  --radius-sm: 4px;
+  --radius: 6px;        /* default — buttons, inputs, cards */
+  --radius-lg: 8px;     /* large surfaces only */
+  --radius-pill: 0;     /* there are no pills. mono chips are square-ish. */
+
+  /* ── borders — hairlines, not shadows ───────────────── */
+  --border-width: 1px;
+
+  /* ── layout ─────────────────────────────────────────── */
+  --measure: 46ch;      /* lede / paragraph max width */
+  --container: 1120px;  /* editorial column max */
+  --gutter: 40px;
+
+  /* ── motion — the ping easing ───────────────────────── */
+  /* --ease-ping: fast-out, settle. --dur-ping: the concentric pulse loop. */
+  --ease-ping: cubic-bezier(0.16, 1, 0.3, 1);  /* @kind other */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);  /* @kind other */
+  --dur-fast: 140ms;  /* @kind other */
+  --dur: 220ms;  /* @kind other */
+  --dur-ping: 1900ms;   /* @kind other */
+}
