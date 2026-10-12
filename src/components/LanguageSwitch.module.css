@@ -1,0 +1,53 @@
+/* A two-way switch on a hairline: the current language is set in ink. */
+
+.switch {
+  display: inline-flex;
+  flex: none;
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.option {
+  appearance: none;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  margin: 0;
+  padding: 0 var(--space-3);
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease-standard),
+    background-color var(--dur-fast) var(--ease-standard);
+}
+
+.option:first-child {
+  border-radius: calc(var(--radius) - 1px) 0 0 calc(var(--radius) - 1px);
+}
+
+.option:last-child {
+  border-radius: 0 calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0;
+}
+
+.option + .option {
+  border-left: var(--border-width) solid var(--border-strong);
+}
+
+.option:hover {
+  color: var(--text);
+}
+
+.option[aria-pressed='true'] {
+  background: var(--surface-ink);
+  color: var(--on-ink);
+  cursor: default;
+}
+
+.option:active:not([aria-pressed='true']) {
+  transform: translateY(0.5px) scale(0.985);
+}

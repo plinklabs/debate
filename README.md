@@ -53,6 +53,15 @@ Every change must pass these. CI runs them in this order:
   compiler API, which the native TypeScript 7 compiler does not provide.
 - The vendored tokens in `src/styles/plink/` are left out of formatting and linting.
 
+## Languages
+
+The UI is in English and Dutch. Every UI string lives in a dictionary,
+`src/i18n/en.ts` and `src/i18n/nl.ts`; English sets the keys, so a key missing from
+either one fails the type check. Components read them with `useI18n()` from `src/i18n/`,
+which also formats numbers and durations in the current language. The language comes from
+the browser, can be switched in the header, and is remembered in `localStorage` under
+`plinklabs:debate:language`, apart from the debate itself.
+
 ## License
 
 Code: GPL-3.0 — see [LICENSE](LICENSE).

@@ -1,17 +1,20 @@
 import styles from './App.module.css';
+import { AppHeader } from './components/AppHeader';
+import { useI18n } from './i18n';
 
 // Placeholder until the debate screens land.
 export function App() {
+  const { t } = useI18n();
   return (
-    <main className={styles.shell}>
-      <p className={styles.eyebrow}>// Work in progress</p>
-      <h1 className={styles.title}>
-        Debate <span className={styles.endorse}>— by Plink Labs</span>
-      </h1>
-      <p className={styles.lede}>
-        Topics, teams, timed turns and an audience vote, for running a debate in class. Nothing
-        leaves your browser.
-      </p>
-    </main>
+    <>
+      <AppHeader />
+      <main className={styles.shell}>
+        <p className={styles.eyebrow}>{t('placeholder.status')}</p>
+        <h1 className={styles.title}>
+          {t('app.name')} <span className={styles.endorse}>{t('app.endorsement')}</span>
+        </h1>
+        <p className={styles.lede}>{t('placeholder.lede')}</p>
+      </main>
+    </>
   );
 }
