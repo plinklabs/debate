@@ -1,0 +1,65 @@
+/* After components/brand/Ping.jsx of plinklabs/plink-design-system: rings
+   radiate on the ping easing, and only when motion is welcome. */
+
+.ping {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  line-height: 0;
+}
+
+.ring {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  border: 2px solid var(--magenta);
+  border-radius: 50%;
+  transform-origin: center;
+}
+
+.core {
+  border-radius: 50%;
+  background: var(--magenta);
+}
+
+.onInk .ring {
+  border-color: var(--magenta-on-dark);
+}
+
+.onInk .core {
+  background: var(--magenta-on-dark);
+}
+
+.still {
+  opacity: 0.45;
+  transform: scale(0.72);
+}
+
+/* Without motion, the pulse rings stand still as one ring. */
+.pulse .ring {
+  opacity: 0.45;
+  transform: scale(0.72);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pulse .ring {
+    animation: ping var(--dur-ping) var(--ease-ping) infinite;
+  }
+
+  .pulse .late {
+    animation-delay: calc(var(--dur-ping) / -2);
+  }
+}
+
+@keyframes ping {
+  0% {
+    transform: scale(0.3);
+    opacity: 0.55;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}

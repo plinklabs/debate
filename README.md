@@ -33,12 +33,13 @@ Every change must pass these. CI runs them in this order:
 | `npm run format:check` | Prettier formatting (`npm run format` fixes it)                             |
 | `npm run lint`         | oxlint: correctness, TypeScript, React and react-hooks rules; warnings fail |
 | `npm run typecheck`    | `tsc` over the app and over the Playwright config and tests                 |
-| `npm test`             | Component tests (Vitest, jsdom, React Testing Library)                      |
+| `npm test`             | Unit and component tests (Vitest, jsdom, React Testing Library)             |
 | `npm run build`        | Type-check and production build to `dist/`                                  |
 | `npm run e2e`          | End-to-end tests (Playwright, Chromium, desktop and phone size)             |
 
-- **Component tests** sit next to the code as `src/**/*.test.tsx`. The jest-dom matchers
-  are set up in `src/test/setup.ts`.
+- **Unit and component tests** sit next to the code as `src/**/*.test.{ts,tsx}`. The
+  jest-dom matchers are set up in `src/test/setup.ts`. The debate model in `src/model/`
+  has no React or DOM, so its tests run in plain Node (`// @vitest-environment node`).
 - **End-to-end tests** live in `e2e/*.spec.ts` and run against the production build,
   served by `vite preview` under the `/debate/` base path. Use relative URLs
   (`page.goto('./')`) so they resolve under `/debate/`. Install the browser once with
@@ -46,11 +47,22 @@ Every change must pass these. CI runs them in this order:
   `dist/` on port 4173 (a server already running there is reused); in CI it serves the
   build from the previous step. When e2e fails in CI, the Playwright report is uploaded as
   the `playwright-report` artifact; locally, open it with `npx playwright show-report`.
+  Checks shared by the specs live in `e2e/helpers.ts` (not a spec, so Playwright doesn't
+  run it): `expectFits(page)` fails on sideways scrolling or rendered text under 16px.
 - **Config:** `.prettierrc.json`, `.oxlintrc.json`, `tsconfig.json` (app) and
   `tsconfig.node.json` (Playwright), `vite.config.ts` (Vitest), `playwright.config.ts`.
 - The linter is oxlint rather than ESLint because typescript-eslint needs the TypeScript
   compiler API, which the native TypeScript 7 compiler does not provide.
 - The vendored tokens in `src/styles/plink/` are left out of formatting and linting.
+
+## Languages
+
+The UI is in English and Dutch. Every UI string lives in a dictionary,
+`src/i18n/en.ts` and `src/i18n/nl.ts`; English sets the keys, so a key missing from
+either one fails the type check. Components read them with `useI18n()` from `src/i18n/`,
+which also formats numbers and durations in the current language. The language comes from
+the browser, can be switched in the header, and is remembered in `localStorage` under
+`plinklabs:debate:language`, apart from the debate itself.
 
 ## License
 

@@ -1,0 +1,82 @@
+/* Hairline and flat-fill instrument buttons, crisp 6px radius. A button that
+   is `aria-disabled` keeps its focus (a move button at the end of a list),
+   but looks and acts disabled. */
+
+.button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 2.75rem;
+  margin: 0;
+  padding: 0.7rem 1.15rem;
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  font-weight: var(--body-weight-strong);
+  line-height: 1.1;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard),
+    transform var(--dur-fast) var(--ease-standard);
+}
+
+.button:active:not(:disabled, [aria-disabled='true']) {
+  transform: translateY(0.5px) scale(0.985);
+}
+
+.button:disabled,
+.button[aria-disabled='true'] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* The single magenta spark of a screen. */
+.primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.primary:hover:not(:disabled, [aria-disabled='true']) {
+  background: var(--accent-press);
+}
+
+.secondary {
+  background: var(--surface-ink);
+  color: var(--on-ink);
+}
+
+.secondary:hover:not(:disabled, [aria-disabled='true']) {
+  background: var(--ink-80);
+}
+
+.outline {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.outline:hover:not(:disabled, [aria-disabled='true']) {
+  background: rgba(27, 27, 35, 0.04);
+  border-color: var(--ink);
+}
+
+.ghost {
+  padding-inline: var(--space-2);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-weight: var(--label-weight);
+  letter-spacing: var(--label-tracking-tight);
+}
+
+.ghost:hover:not(:disabled, [aria-disabled='true']) {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
