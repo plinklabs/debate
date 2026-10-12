@@ -8,13 +8,13 @@ names never leave the device.
 
 ## Development
 
-Requires Node 22.
+Requires Node 22 (22.13 or later).
 
 ```bash
 npm install
 npm run dev      # local dev server
-npm test         # unit tests (Vitest)
 npm run build    # type-check and build to dist/
+npm run preview  # serve the build at http://localhost:4173/debate/
 ```
 
 Every push to `main` is built and deployed to GitHub Pages by
@@ -23,6 +23,34 @@ same checks without deploying.
 
 The look follows the [Plink Labs design system](https://github.com/plinklabs/plink-design-system);
 its tokens are vendored in `src/styles/plink/`.
+
+## Checks
+
+Every change must pass these. CI runs them in this order:
+
+| Command                | What it checks                                                              |
+| ---------------------- | --------------------------------------------------------------------------- |
+| `npm run format:check` | Prettier formatting (`npm run format` fixes it)                             |
+| `npm run lint`         | oxlint: correctness, TypeScript, React and react-hooks rules; warnings fail |
+| `npm run typecheck`    | `tsc` over the app and over the Playwright config and tests                 |
+| `npm test`             | Component tests (Vitest, jsdom, React Testing Library)                      |
+| `npm run build`        | Type-check and production build to `dist/`                                  |
+| `npm run e2e`          | End-to-end tests (Playwright, Chromium, desktop and phone size)             |
+
+- **Component tests** sit next to the code as `src/**/*.test.tsx`. The jest-dom matchers
+  are set up in `src/test/setup.ts`.
+- **End-to-end tests** live in `e2e/*.spec.ts` and run against the production build,
+  served by `vite preview` under the `/debate/` base path. Use relative URLs
+  (`page.goto('./')`) so they resolve under `/debate/`. Install the browser once with
+  `npx playwright install chromium`. Locally, `npm run e2e` builds first and then serves
+  `dist/` on port 4173 (a server already running there is reused); in CI it serves the
+  build from the previous step. When e2e fails in CI, the Playwright report is uploaded as
+  the `playwright-report` artifact; locally, open it with `npx playwright show-report`.
+- **Config:** `.prettierrc.json`, `.oxlintrc.json`, `tsconfig.json` (app) and
+  `tsconfig.node.json` (Playwright), `vite.config.ts` (Vitest), `playwright.config.ts`.
+- The linter is oxlint rather than ESLint because typescript-eslint needs the TypeScript
+  compiler API, which the native TypeScript 7 compiler does not provide.
+- The vendored tokens in `src/styles/plink/` are left out of formatting and linting.
 
 ## License
 

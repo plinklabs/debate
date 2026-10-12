@@ -9,7 +9,8 @@ export function App() {
         Debate <span className={styles.endorse}>— by Plink Labs</span>
       </h1>
       <p className={styles.lede}>
-        Topics, teams, timed turns and an audience vote, for running a debate in class. Nothing leaves your browser.
+        Topics, teams, timed turns and an audience vote, for running a debate in class. Nothing
+        leaves your browser.
       </p>
     </main>
   );
