@@ -1,12 +1,16 @@
-import { useEffect, useReducer, useState } from 'react';
+import { useEffect, useReducer, useRef, useState } from 'react';
 import { AppHeader } from './components/AppHeader';
 import { DebateScreen } from './debate/DebateScreen';
 import { useI18n } from './i18n';
+import type { DebateConfig } from './model/config';
 import type { Locale } from './model/locale';
 import { defaultConfig } from './model/presets';
 import { currentDebate, reducer, type AppState } from './model/reducer';
 import { loadState, saveState } from './model/storage';
+import { useConfigEditor } from './setup/configEditor';
 import { SetupScreen, type SetupTab } from './setup/SetupScreen';
+import { useIncomingSetup } from './share/incoming';
+import { SharedSetupScreen } from './share/SharedSetupScreen';
 
 const browserStorage = () => window.localStorage;
 
@@ -19,11 +23,14 @@ function startState(locale: Locale): AppState {
  * The app: the header, and the setup or the open debate. Which screen shows
  * follows the app state: a debate that is open (`session.current`) has the
  * screen, so a reload comes back to it. The URL hash is not used for this; it
- * is kept for a shared setup (#5).
+ * carries a shared setup (`#c=…`, #5), which is shown before anything else
+ * until the teacher uses it or not.
  */
 export function App() {
   const { locale } = useI18n();
   const [state, dispatch] = useReducer(reducer, locale, startState);
+  const editor = useConfigEditor(state.config, dispatch);
+  const { incoming, openFile, close } = useIncomingSetup();
   const [tab, setTab] = useState<SetupTab>(() =>
     state.session.debates.length > 0 ? 'debates' : 'topics',
   );
@@ -35,12 +42,34 @@ export function App() {
     saveState(browserStorage, state, performance.now());
   }, [state]);
 
+  // Once a shared setup is used or not, reading starts at the top of the
+  // screen that comes back (the debate screen sees to its own).
+  const previewing = incoming !== null;
+  const wasPreviewing = useRef(previewing);
+  useEffect(() => {
+    if (wasPreviewing.current && !previewing) {
+      document.querySelector<HTMLElement>('main h1[tabindex]')?.focus();
+    }
+    wasPreviewing.current = previewing;
+  }, [previewing]);
+
+  const applyShared = (config: DebateConfig) => {
+    // The setup screen shows what arrived, starting with the topics.
+    dispatch({ type: 'close-debate', now: performance.now() });
+    editor.apply(config);
+    setTab('topics');
+    setLeftDebate(null);
+    close();
+  };
+
   const open = currentDebate(state);
 
   return (
     <>
       <AppHeader />
-      {open === null ? (
+      {incoming !== null ? (
+        <SharedSetupScreen incoming={incoming} state={state} onUse={applyShared} onClose={close} />
+      ) : open === null ? (
         <SetupScreen
           state={state}
           dispatch={dispatch}
@@ -51,6 +80,7 @@ export function App() {
             setTab(next);
           }}
           focusDebate={leftDebate}
+          onOpenFile={openFile}
         />
       ) : (
         <DebateScreen

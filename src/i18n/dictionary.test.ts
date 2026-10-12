@@ -17,6 +17,8 @@ import type { IssueOf } from './types';
 /** One issue of every code, with numbers big enough to show the grouping. */
 const SAMPLE_ISSUES: { readonly [C in ConfigIssueCode]: IssueOf<C> } = {
   'invalid-json': { code: 'invalid-json', path: [] },
+  'invalid-link': { code: 'invalid-link', path: [] },
+  'too-large': { code: 'too-large', path: [] },
   'newer-version': { code: 'newer-version', path: ['version'], found: 2, supported: 1 },
   'invalid-version': { code: 'invalid-version', path: ['version'] },
   'missing-field': { code: 'missing-field', path: ['format'] },

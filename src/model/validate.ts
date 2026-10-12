@@ -30,6 +30,10 @@ export type ValueType = 'object' | 'array' | 'string' | 'integer';
 export type ConfigIssue =
   /** The text is not JSON at all. */
   | { readonly code: 'invalid-json'; readonly path: IssuePath }
+  /** A link whose setup cannot be unpacked: cut short, or not made by this app (share.ts). */
+  | { readonly code: 'invalid-link'; readonly path: IssuePath }
+  /** A link or a file larger than any setup can be (share.ts). */
+  | { readonly code: 'too-large'; readonly path: IssuePath }
   /** Made by a newer version of the app. */
   | {
       readonly code: 'newer-version';

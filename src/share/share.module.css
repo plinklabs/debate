@@ -1,0 +1,238 @@
+/* Sharing a setup: the Share panel of the setup screen, and the preview of a
+   setup from a link or a file. Built on setup.module.css: hairlines, mono
+   numbers and labels at the 16px floor, magenta only on the one action that
+   copies a link or uses a setup. */
+
+/* ── the Share panel ───────────────────────────────────── */
+
+.linkRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-3) var(--space-4);
+}
+
+.linkField {
+  flex: 1 1 24rem;
+}
+
+/* Level with the control under the field's label. */
+.linkRow > button {
+  margin-top: 1.75rem;
+}
+
+.linkField input {
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+}
+
+.copyStatus,
+.copyFailed {
+  max-width: 62ch;
+  margin: var(--space-3) 0 0;
+}
+
+.copyStatus:empty {
+  display: none;
+}
+
+.copyFailed {
+  padding: var(--space-3) var(--space-4);
+  border: var(--border-width) solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+}
+
+.groupIntro {
+  max-width: 62ch;
+  margin: 0 0 var(--space-4);
+  color: var(--text-muted);
+}
+
+.fileActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+/* ── the preview ───────────────────────────────────────── */
+
+/* Focused by script when the screen opens, not by the keyboard. */
+.title:focus {
+  outline: none;
+}
+
+.contents {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+  gap: var(--space-6) var(--space-7);
+}
+
+.section {
+  min-width: 0;
+}
+
+.topics,
+.steps {
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: var(--border-width) solid var(--border);
+}
+
+.topics {
+  counter-reset: topic;
+}
+
+.steps {
+  counter-reset: step;
+}
+
+.topics > li,
+.step {
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 1fr);
+  padding: var(--space-3) 0;
+  border-bottom: var(--border-width) solid var(--border);
+}
+
+.topics > li {
+  counter-increment: topic;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.step {
+  counter-increment: step;
+  column-gap: 0;
+  row-gap: var(--space-1);
+}
+
+/* The number of a topic or a step, in mono: 01, 02, … */
+.topics > li::before,
+.step::before {
+  grid-row: span 2;
+  padding-top: 0.2rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  letter-spacing: var(--label-tracking-tight);
+  color: var(--text-muted);
+}
+
+.topics > li::before {
+  content: counter(topic, decimal-leading-zero);
+}
+
+.step::before {
+  content: counter(step, decimal-leading-zero);
+}
+
+.stepName {
+  font-weight: var(--body-weight-strong);
+  overflow-wrap: anywhere;
+}
+
+.stepDetails {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  letter-spacing: var(--label-tracking-tight);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.specs {
+  margin-top: var(--space-4);
+}
+
+.sides {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3) var(--space-4);
+  margin: 0 0 var(--space-5);
+}
+
+.sides dt {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  letter-spacing: var(--label-tracking-tight);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.sides dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-weight: var(--label-weight-strong);
+  letter-spacing: var(--label-tracking);
+  overflow-wrap: anywhere;
+}
+
+/* What using the setup does to the debates here: a block, not a row, at a
+   width that reads. */
+.impact {
+  display: block;
+  max-width: 48rem;
+  margin: var(--space-6) 0 0;
+}
+
+.impact p {
+  margin: 0;
+}
+
+.impactList {
+  margin: var(--space-3) 0 0;
+  padding-left: var(--space-5);
+}
+
+.impactList > li + li {
+  margin-top: var(--space-2);
+}
+
+.problems {
+  max-width: 62ch;
+}
+
+.problemList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.problemList > li {
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--accent);
+  overflow-wrap: anywhere;
+}
+
+.place {
+  font-family: var(--font-mono);
+  font-weight: var(--label-weight-strong);
+  letter-spacing: var(--label-tracking-tight);
+}
+
+.more {
+  margin: var(--space-3) 0 0;
+  color: var(--text-muted);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+@media (max-width: 640px) {
+  .linkRow > button {
+    margin-top: 0;
+  }
+
+  .sides {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

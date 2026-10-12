@@ -32,6 +32,11 @@
   letter-spacing: var(--display-tracking);
 }
 
+/* Focused by script (after a shared setup was used), not by the keyboard. */
+.title:focus {
+  outline: none;
+}
+
 .endorse {
   font-size: 0.5em;
   font-weight: 400;

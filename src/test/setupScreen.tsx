@@ -11,9 +11,10 @@ interface HarnessProps {
   readonly initial: AppState;
   readonly tab: SetupTab;
   readonly onState: (state: AppState) => void;
+  readonly onOpenFile: (file: File) => void;
 }
 
-function Harness({ initial, tab, onState }: HarnessProps) {
+function Harness({ initial, tab, onState, onOpenFile }: HarnessProps) {
   const [state, dispatch] = useReducer(reducer, initial);
   const [current, setCurrent] = useState(tab);
   useEffect(() => onState(state), [state, onState]);
@@ -24,6 +25,7 @@ function Harness({ initial, tab, onState }: HarnessProps) {
       tab={current}
       onTabChange={setCurrent}
       focusDebate={null}
+      onOpenFile={onOpenFile}
     />
   );
 }
@@ -32,13 +34,20 @@ export function renderSetup({
   tab = 'topics',
   locale = 'en',
   initial = initialState(GRAFFITI_PRESET.build(locale)),
-}: { tab?: SetupTab; locale?: Locale; initial?: AppState } = {}) {
+  onOpenFile = () => {},
+}: {
+  tab?: SetupTab;
+  locale?: Locale;
+  initial?: AppState;
+  onOpenFile?: (file: File) => void;
+} = {}) {
   let latest = initial;
   const onState = (state: AppState) => {
     latest = state;
   };
-  const view = renderWithI18n(<Harness initial={initial} tab={tab} onState={onState} />, {
-    locale,
-  });
+  const view = renderWithI18n(
+    <Harness initial={initial} tab={tab} onState={onState} onOpenFile={onOpenFile} />,
+    { locale },
+  );
   return { ...view, state: () => latest };
 }

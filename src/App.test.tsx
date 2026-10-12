@@ -1,13 +1,16 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { App } from './App';
+import { setStepSeconds, setTopicText } from './model/edit';
 import { GRAFFITI_PRESET } from './model/presets';
 import { initialState, reducer, type Action } from './model/reducer';
+import { configFileText, encodeConfig } from './model/share';
 import { STORAGE_KEY, saveState } from './model/storage';
 import { renderWithI18n } from './test/i18n';
 
 afterEach(() => {
   localStorage.clear();
+  window.history.replaceState(null, '', '/');
 });
 
 /** A stored session with one debate and two complete teams. */
@@ -38,6 +41,7 @@ describe('App', () => {
       'Topics',
       'Format',
       'Debates and teams',
+      'Share',
     ]);
   });
 
@@ -138,5 +142,171 @@ describe('App', () => {
     fireEvent.keyDown(tab('Format'), { key: 'ArrowRight' });
     expect(tab('Debates and teams')).toHaveAttribute('aria-selected', 'true');
     expect(tab('Debates and teams')).toHaveFocus();
+  });
+});
+
+describe('a shared setup in the app', () => {
+  const english = GRAFFITI_PRESET.build('en');
+  const shared = setStepSeconds(
+    setTopicText(english, 't1', 'Homework should be banned.'),
+    'opening-pro',
+    75,
+  );
+
+  /** Opens the page at a link to `config`, as a browser would. */
+  async function openLinkTo(config = shared) {
+    window.history.replaceState(null, '', `/#c=${await encodeConfig(config)}`);
+  }
+
+  const heading = () => screen.getByRole('heading', { level: 1 });
+
+  function openFile(container: HTMLElement, file: File) {
+    fireEvent.click(screen.getByRole('tab', { name: 'Share' }));
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+    if (input === null) throw new Error('No file input');
+    fireEvent.change(input, { target: { files: [file] } });
+  }
+
+  it('shows the setup from a link first, and uses it when asked', async () => {
+    await openLinkTo();
+    renderWithI18n(<App />);
+
+    // Straight away, not after the setup screen has flashed by.
+    expect(heading()).toHaveTextContent('Reading the setup…');
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Use this setup?' })).toHaveFocus();
+    expect(screen.getByText('Homework should be banned.')).toBeInTheDocument();
+    // Nothing has changed yet.
+    expect(stored().config).toEqual(english);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use this setup' }));
+
+    expect(heading()).toHaveTextContent('Debate — by Plink Labs');
+    expect(heading()).toHaveFocus();
+    expect(screen.getByRole('tab', { name: 'Topics' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('textbox', { name: 'Topic 1' })).toHaveValue(
+      'Homework should be banned.',
+    );
+    expect(stored().config).toEqual(shared);
+    // The link is gone from the address, so a reload does not ask again.
+    expect(window.location.hash).toBe('');
+    expect(window.location.pathname).toBe('/');
+  });
+
+  it('leaves the setup as it was when cancelled', async () => {
+    await openLinkTo();
+    const first = renderWithI18n(<App />);
+    await screen.findByRole('heading', { name: 'Use this setup?' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(heading()).toHaveTextContent('Debate — by Plink Labs');
+    expect(screen.getByRole('textbox', { name: 'Topic 1' })).toHaveValue(english.topics[0].text);
+    expect(stored().config).toEqual(english);
+    expect(window.location.hash).toBe('');
+    first.unmount();
+
+    renderWithI18n(<App />);
+    expect(heading()).toHaveTextContent('Debate — by Plink Labs');
+  });
+
+  it('shows a link opened while the app is open, and lets it go on Back', async () => {
+    renderWithI18n(<App />);
+    expect(heading()).toHaveTextContent('Debate — by Plink Labs');
+
+    const encoded = await encodeConfig(shared);
+    act(() => {
+      window.location.hash = `c=${encoded}`;
+    });
+    expect(await screen.findByRole('heading', { name: 'Use this setup?' })).toBeInTheDocument();
+
+    // Back in the browser, to the address without the link.
+    act(() => {
+      window.location.hash = '';
+    });
+    expect(await screen.findByRole('tablist')).toBeInTheDocument();
+    expect(stored().config).toEqual(english);
+  });
+
+  it('says what is wrong with a broken link, and goes on to the app', async () => {
+    window.history.replaceState(null, '', '/#c=this-is-not-a-setup');
+    renderWithI18n(<App />);
+
+    expect(
+      await screen.findByRole('heading', { name: 'This link cannot be used' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('This link is damaged or incomplete.');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to the app' }));
+
+    expect(heading()).toHaveTextContent('Debate — by Plink Labs');
+    expect(window.location.hash).toBe('');
+    expect(stored().config).toEqual(english);
+  });
+
+  it('closes the open debate when a shared setup is used, and keeps the names', async () => {
+    storeReadyDebate();
+    const first = renderWithI18n(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    expect(stored().session.current).toBe('d1');
+    first.unmount();
+
+    await openLinkTo();
+    renderWithI18n(<App />);
+    await screen.findByRole('heading', { name: 'Use this setup?' });
+    fireEvent.click(screen.getByRole('button', { name: 'Use this setup' }));
+
+    expect(heading()).toHaveTextContent('Debate — by Plink Labs');
+    expect(stored().session.current).toBeNull();
+    expect(stored().session.debates[0].teams.pro).toEqual(['Ann', 'Bert', '']);
+    expect(stored().config).toEqual(shared);
+  });
+
+  it('goes back to the open debate when a shared setup is not used', async () => {
+    storeReadyDebate();
+    const first = renderWithI18n(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    first.unmount();
+
+    await openLinkTo();
+    renderWithI18n(<App />);
+    await screen.findByRole('heading', { name: 'Use this setup?' });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(heading()).toHaveTextContent(english.topics[2].text);
+    expect(heading()).toHaveFocus();
+    expect(stored().session.current).toBe('d1');
+  });
+
+  it('opens a setup file from the Share tab through the same preview', async () => {
+    const { container } = renderWithI18n(<App />);
+    openFile(
+      container,
+      new File([configFileText(shared)], 'graffiti.json', { type: 'application/json' }),
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Use this setup?' })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'This setup comes from the file “graffiti.json”. Nothing changes until you choose to use it.',
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use this setup' }));
+
+    expect(screen.getByRole('tab', { name: 'Topics' })).toHaveAttribute('aria-selected', 'true');
+    expect(stored().config).toEqual(shared);
+  });
+
+  it('says what is wrong with a file that is not a setup', async () => {
+    const { container } = renderWithI18n(<App />);
+    openFile(container, new File(['{"name": "Ann"}'], 'class.json'));
+
+    expect(
+      await screen.findByRole('heading', { name: 'This file cannot be used' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Version: This field is missing.');
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to the app' }));
+    expect(screen.getByRole('tab', { name: 'Share' })).toHaveAttribute('aria-selected', 'true');
   });
 });

@@ -28,6 +28,9 @@ const valueTypes: Readonly<Record<ValueType, string>> = {
 
 const issues: IssueMessages = {
   'issue.invalid-json': () => 'Dit is geen opzet: de tekst kan niet gelezen worden.',
+  'issue.invalid-link': () =>
+    'Deze link is beschadigd of onvolledig. Kopieer de hele link opnieuw, of vraag een nieuwe.',
+  'issue.too-large': () => 'Dit is te groot voor een opzet.',
   'issue.newer-version': ({ found, supported }) =>
     `Deze opzet is gemaakt met een nieuwere versie van de app (versie ${n(found)}; deze leest tot versie ${n(supported)}). Laad de pagina opnieuw om de nieuwste versie te krijgen.`,
   'issue.invalid-version': () => 'Deze opzet heeft geen geldig versienummer.',
@@ -71,6 +74,7 @@ export const nl: Dictionary = {
   'setup.tab.topics': 'Stellingen',
   'setup.tab.format': 'Debatvorm',
   'setup.tab.debates': 'Debatten en teams',
+  'setup.tab.share': 'Delen',
 
   'topics.intro':
     'De stellingen waarover de klas debatteert. Meerdere debatten kunnen dezelfde stelling gebruiken.',
@@ -138,6 +142,50 @@ export const nl: Dictionary = {
   'debates.remove': ({ number }) => `Debat ${n(number)} verwijderen`,
   'debates.remove.question': 'Dit debat verwijderen, met de namen en resultaten?',
   'debates.remove.confirm': 'Debat verwijderen',
+
+  'share.intro':
+    'Deel deze opzet met een collega, bewaar hem voor volgend jaar of zet hem op een cursuspagina. Een link of een bestand bevat de stellingen en de debatvorm, en niets anders: namen, tijden, stemmen en scores blijven in deze browser.',
+  'share.link': 'Als link',
+  'share.link.label': 'Link naar deze opzet',
+  'share.link.hint': 'Wie hem opent, ziet eerst de opzet en kiest dan of die gebruikt wordt.',
+  'share.link.making': 'De link wordt gemaakt…',
+  'share.link.copy': 'Link kopiëren',
+  'share.link.copied': 'Link gekopieerd.',
+  'share.link.copyFailed':
+    'Deze browser laat de app niet kopiëren. De link is geselecteerd: kopieer hem met Ctrl+C, of Cmd+C op een Mac.',
+  'share.file': 'Als bestand',
+  'share.file.intro':
+    'Een .json-bestand om te bewaren of door te sturen. Open er een om te zien wat erin zit, voor je het gebruikt.',
+  'share.file.download': 'Bestand downloaden',
+  'share.file.open': 'Bestand openen',
+  'share.file.name': 'debatopzet.json',
+
+  'preview.eyebrow': '// Gedeelde opzet',
+  'preview.reading': 'De opzet wordt gelezen…',
+  'preview.title': 'Deze opzet gebruiken?',
+  'preview.fromLink':
+    'Deze opzet komt uit een link. Er verandert niets tot je kiest om hem te gebruiken.',
+  'preview.fromFile': ({ name }) =>
+    `Deze opzet komt uit het bestand ‘${name}’. Er verandert niets tot je kiest om hem te gebruiken.`,
+  'preview.teamSize': ({ min, max }) => (min === max ? n(min) : `${n(min)} tot ${n(max)}`),
+  'preview.perTeam': ({ duration }) => `${duration} per team`,
+  'preview.impact': ({ debates, results }) =>
+    debates === 1
+      ? `Er is één debat in deze browser${results > 0 ? ', en het heeft al resultaten' : ''}. Het blijft, maar volgt vanaf nu deze opzet:`
+      : `Er zijn ${n(debates)} debatten in deze browser${results === 0 ? '' : results === 1 ? ', en één ervan heeft al resultaten' : `, en ${n(results)} ervan hebben al resultaten`}. Ze blijven, maar volgen vanaf nu deze opzet:`,
+  'preview.impact.topic': ({ number, topic }) => `Debat ${n(number)} gaat dan over ‘${topic}’`,
+  'preview.impact.topicGone': ({ number }) =>
+    `Debat ${n(number)} verliest zijn stelling: die zit niet in deze opzet.`,
+  'preview.impact.format':
+    'De debatvorm verandert: een stap die deze debatvorm niet heeft, valt uit de resultaten, en een nieuwe duur verandert de geplande tijd.',
+  'preview.use': 'Deze opzet gebruiken',
+  'preview.invalid.link': 'Deze link is niet bruikbaar',
+  'preview.invalid.file': 'Dit bestand is niet bruikbaar',
+  'preview.invalid.intro': 'Er zit geen opzet in die deze app kan lezen.',
+  'preview.invalid.more': ({ count }) =>
+    count === 1 ? 'En nog één probleem.' : `En nog ${n(count)} problemen.`,
+  'preview.place.version': 'Versie',
+  'preview.close': 'Verder naar de app',
 
   'debate.pending':
     'Het debatscherm is nog in aanbouw. Het toont straks de stappen, een grote klok en de stemming.',

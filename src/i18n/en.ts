@@ -30,6 +30,9 @@ const valueTypes: Readonly<Record<ValueType, string>> = {
 
 const issues: IssueMessages = {
   'issue.invalid-json': () => 'This is not a setup: the text cannot be read.',
+  'issue.invalid-link': () =>
+    'This link is damaged or incomplete. Copy the whole link again, or ask for a new one.',
+  'issue.too-large': () => 'This is too large to be a setup.',
   'issue.newer-version': ({ found, supported }) =>
     `This setup was made with a newer version of the app (version ${n(found)}; this one reads up to version ${n(supported)}). Reload the page to get the latest version.`,
   'issue.invalid-version': () => 'This setup has no valid version number.',
@@ -78,6 +81,7 @@ export const en = {
   'setup.tab.topics': 'Topics',
   'setup.tab.format': 'Format',
   'setup.tab.debates': 'Debates and teams',
+  'setup.tab.share': 'Share',
 
   // Topics: the statements to debate.
   'topics.intro':
@@ -148,6 +152,53 @@ export const en = {
   'debates.remove': ({ number }: { number: number }) => `Remove debate ${n(number)}`,
   'debates.remove.question': 'Remove this debate, with its names and results?',
   'debates.remove.confirm': 'Remove debate',
+
+  // Share: the setup (topics and format) as a link or a file.
+  'share.intro':
+    'Share this setup with a colleague, keep it for next year, or put it on a course page. A link or a file holds the topics and the format, and nothing else: names, timings, votes and scores stay in this browser.',
+  'share.link': 'As a link',
+  'share.link.label': 'Link to this setup',
+  'share.link.hint': 'Whoever opens it sees the setup first, and then chooses whether to use it.',
+  'share.link.making': 'Making the link…',
+  'share.link.copy': 'Copy link',
+  'share.link.copied': 'Link copied.',
+  'share.link.copyFailed':
+    'This browser does not let the app copy. The link is selected: copy it with Ctrl+C, or Cmd+C on a Mac.',
+  'share.file': 'As a file',
+  'share.file.intro':
+    'A .json file to keep or to send on. Open one to see what is in it before you use it.',
+  'share.file.download': 'Download file',
+  'share.file.open': 'Open a file',
+  'share.file.name': 'debate-setup.json',
+
+  // A shared setup, from a link or a file, shown before it is used.
+  'preview.eyebrow': '// Shared setup',
+  'preview.reading': 'Reading the setup…',
+  'preview.title': 'Use this setup?',
+  'preview.fromLink': 'This setup comes from a link. Nothing changes until you choose to use it.',
+  'preview.fromFile': ({ name }: { name: string }) =>
+    `This setup comes from the file “${name}”. Nothing changes until you choose to use it.`,
+  'preview.teamSize': ({ min, max }: { min: number; max: number }) =>
+    min === max ? n(min) : `${n(min)} to ${n(max)}`,
+  'preview.perTeam': ({ duration }: { duration: string }) => `${duration} per team`,
+  'preview.impact': ({ debates, results }: { debates: number; results: number }) =>
+    debates === 1
+      ? `There is one debate in this browser${results > 0 ? ', and it already has results' : ''}. It stays, but follows this setup from now on:`
+      : `There are ${n(debates)} debates in this browser${results === 0 ? '' : results === 1 ? ', and one already has results' : `, and ${n(results)} already have results`}. They stay, but follow this setup from now on:`,
+  'preview.impact.topic': ({ number, topic }: { number: number; topic: string }) =>
+    `Debate ${n(number)} will be about “${topic}”`,
+  'preview.impact.topicGone': ({ number }: { number: number }) =>
+    `Debate ${n(number)} loses its topic: this setup does not have it.`,
+  'preview.impact.format':
+    'The format changes: a step this format does not have drops out of the results, and a new duration changes the time that was planned.',
+  'preview.use': 'Use this setup',
+  'preview.invalid.link': 'This link cannot be used',
+  'preview.invalid.file': 'This file cannot be used',
+  'preview.invalid.intro': 'It does not hold a setup that this app can read.',
+  'preview.invalid.more': ({ count }: { count: number }) =>
+    count === 1 ? 'And one more problem.' : `And ${n(count)} more problems.`,
+  'preview.place.version': 'Version',
+  'preview.close': 'Continue to the app',
 
   // The debate screen, a placeholder until #6.
   'debate.pending':
