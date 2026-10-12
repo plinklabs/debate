@@ -1,0 +1,364 @@
+/* The style sheet inside a report file (#7), read as text by html.ts. The
+   report opens without a network, so nothing is loaded: the Plink Labs faces
+   are named first and fall back to the system's own. Paper and ink, hairlines
+   instead of shadows, a 6px radius, magenta only on the ping by the title.
+   On screen nothing is under 16px; in print it is set for A4. */
+
+:root {
+  --ink: #1b1b23;
+  --paper: #faf7f2;
+  --muted: #6e6a62;
+  --hairline: rgba(27, 27, 35, 0.14);
+  --hairline-strong: rgba(27, 27, 35, 0.26);
+  --magenta: #db2777;
+  --radius: 6px;
+  --radius-sm: 4px;
+  --display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --body: 'Hanken Grotesk', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'Space Mono', ui-monospace, 'SF Mono', Menlo, Consolas, 'Courier New', monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+main {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 48px 40px 72px;
+}
+
+/* ── masthead ── */
+
+.eyebrow {
+  margin: 0 0 12px;
+  font-family: var(--mono);
+  font-size: 1rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+h1 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 2.4rem;
+  font-weight: 560;
+  line-height: 1.06;
+  letter-spacing: -0.018em;
+}
+
+/* The ping: an open ring, the one spark of magenta. */
+.ping {
+  display: inline-block;
+  width: 0.42em;
+  height: 0.42em;
+  margin-left: 0.3em;
+  border: 0.08em solid var(--magenta);
+  border-radius: 50%;
+  vertical-align: 0.08em;
+}
+
+.meta {
+  margin: 12px 0 0;
+  font-family: var(--mono);
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+}
+
+.note {
+  max-width: 62ch;
+  margin: 12px 0 0;
+  color: var(--muted);
+}
+
+.empty {
+  margin: 48px 0 0;
+  color: var(--muted);
+}
+
+/* ── a debate ── */
+
+.debate {
+  margin-top: 56px;
+  padding-top: 24px;
+  border-top: 1px solid var(--ink);
+}
+
+.debate-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+h2 {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 1rem;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* A square-ish mono chip, never a pill. */
+.chip {
+  margin: 0;
+  padding: 2px 8px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-sm);
+  font-family: var(--mono);
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.chip.open {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.topic {
+  max-width: 46ch;
+  margin: 12px 0 0;
+  font-family: var(--display);
+  font-size: 1.75rem;
+  font-weight: 560;
+  line-height: 1.2;
+  letter-spacing: -0.018em;
+  overflow-wrap: anywhere;
+}
+
+.topic.gone {
+  font-style: italic;
+  color: var(--muted);
+}
+
+h3 {
+  margin: 32px 0 12px;
+  font-family: var(--display);
+  font-size: 1.375rem;
+  font-weight: 560;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.teams {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  align-items: start;
+  gap: 24px 40px;
+}
+
+/* ── tables: hairlines, mono heads, figures that line up ── */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+caption {
+  padding: 0 0 8px;
+  font-family: var(--mono);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-align: left;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+th,
+td {
+  padding: 8px 16px 8px 0;
+  border-bottom: 1px solid var(--hairline);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: break-word;
+}
+
+th:last-child,
+td:last-child {
+  padding-right: 0;
+}
+
+thead th {
+  border-bottom-color: var(--hairline-strong);
+  font-family: var(--mono);
+  font-size: 1rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+thead td {
+  border-bottom-color: var(--hairline-strong);
+}
+
+/* A name or a step: the column that gives way on a narrow screen. */
+tbody th {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.num {
+  text-align: right;
+}
+
+td.num {
+  white-space: nowrap;
+}
+
+.no {
+  margin-right: 4px;
+  font-family: var(--mono);
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.who {
+  display: block;
+  font-family: var(--mono);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.mark {
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
+}
+
+.over {
+  font-weight: 700;
+}
+
+.early,
+.quiet {
+  color: var(--muted);
+}
+
+/* The balance of a free round: the first team's part of the time in ink. */
+.bar {
+  display: flex;
+  height: 12px;
+  margin-top: 12px;
+  overflow: hidden;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius-sm);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.bar > span {
+  background: var(--ink);
+}
+
+.shift {
+  margin: 16px 0 0;
+  font-family: var(--display);
+  font-size: 1.375rem;
+  font-weight: 560;
+  line-height: 1.3;
+}
+
+.shift .votes {
+  font-family: var(--body);
+  font-size: 1rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* ── a phone ── */
+
+@media (max-width: 640px) {
+  main {
+    padding: 32px 16px 56px;
+  }
+
+  h1 {
+    font-size: 2rem;
+  }
+
+  .topic {
+    font-size: 1.375rem;
+  }
+
+  th,
+  td {
+    padding-right: 8px;
+  }
+}
+
+/* ── print: A4, one debate per page, no table cut in half ── */
+
+@page {
+  size: A4;
+  margin: 16mm 14mm;
+}
+
+@media print {
+  html {
+    font-size: 10pt;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  main {
+    max-width: none;
+    padding: 0;
+  }
+
+  .note {
+    display: none;
+  }
+
+  .debate {
+    margin-top: 24px;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .debate + .debate {
+    break-before: page;
+  }
+
+  h3 {
+    margin-top: 20px;
+    break-after: avoid;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tr,
+  .teams table,
+  .balance,
+  .vote,
+  .bar,
+  .shift {
+    break-inside: avoid;
+  }
+}

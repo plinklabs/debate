@@ -142,6 +142,15 @@ export function hasResults(debate: Debate): boolean {
   return debate.done || Object.keys(debate.records).length > 0;
 }
 
+/** Where a debate stands, as the list of debates says it. */
+export type DebateStatus = 'done' | 'started' | 'ready' | 'incomplete';
+
+export function debateStatus(format: Format, debate: Debate): DebateStatus {
+  if (debate.done) return 'done';
+  if (hasResults(debate)) return 'started';
+  return isPlayable(format, debate) ? 'ready' : 'incomplete';
+}
+
 /** The topics that debates are about, by id. */
 export function debatedTopicIds(session: Session): Set<string> {
   return new Set(session.debates.map((debate) => debate.topicId));

@@ -71,7 +71,12 @@ export type Action =
   | { readonly type: 'clear-step' }
   | { readonly type: 'set-votes'; readonly side: Side; readonly value: number }
   /** Forget every debate, name and result; keep the setup. */
-  | { readonly type: 'reset-session' };
+  | { readonly type: 'reset-session' }
+  /**
+   * Replace everything with a state saved elsewhere: a report opened in the
+   * app (#7), already checked (`readReportFile`). Its timers are paused.
+   */
+  | { readonly type: 'load-state'; readonly state: AppState };
 
 export interface OpenDebate {
   readonly debate: Debate;
@@ -186,6 +191,8 @@ export function reducer(state: AppState, action: Action): AppState {
       return updateOpen(state, (open) => setVotes(open, action.side, action.value));
     case 'reset-session':
       return withSession(state, emptySession());
+    case 'load-state':
+      return { config: action.state.config, session: action.state.session };
   }
 }
 

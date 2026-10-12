@@ -11,5 +11,8 @@ export default defineConfig({
     include: ['src/**/*.test.{ts,tsx}'],
     environment: 'jsdom',
     setupFiles: ['src/test/setup.ts'],
+    // Vitest leaves CSS out by default. The report's style sheet is read as
+    // text into the report file (src/report/html.ts), so tests need it.
+    css: { include: [/src\/report\/document\.css/] },
   },
 });

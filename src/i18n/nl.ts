@@ -39,6 +39,8 @@ const issues: IssueMessages = {
   'issue.invalid-link': () =>
     'Deze link is beschadigd of onvolledig. Kopieer de hele link opnieuw, of vraag een nieuwe.',
   'issue.too-large': () => 'Dit is te groot voor een opzet.',
+  'issue.not-a-report': () =>
+    'Dit is geen verslag van deze app: er zitten geen debatten in om te laden.',
   'issue.newer-version': ({ found, supported }) =>
     `Deze opzet is gemaakt met een nieuwere versie van de app (versie ${n(found)}; deze leest tot versie ${n(supported)}). Laad de pagina opnieuw om de nieuwste versie te krijgen.`,
   'issue.invalid-version': () => 'Deze opzet heeft geen geldig versienummer.',
@@ -150,6 +152,86 @@ export const nl: Dictionary = {
   'debates.remove': ({ number }) => `Debat ${n(number)} verwijderen`,
   'debates.remove.question': 'Dit debat verwijderen, met de namen en resultaten?',
   'debates.remove.confirm': 'Debat verwijderen',
+
+  'results.title': 'Resultaten',
+  'results.intro':
+    'Het verslag bevat elk debat met resultaten: één bestand dat in elke browser opent en op A4 afdrukt. Open het hier opnieuw om verder te gaan met de debatten. Het CSV-bestand is voor een rekenblad.',
+  'results.none':
+    'Nog geen resultaten. Een verslag dat je eerder maakte, kan je hier openen om verder te gaan met de debatten.',
+  'results.finished': ({ number }) => `Debat ${n(number)} is afgewerkt.`,
+  'results.downloadReport': 'Verslag downloaden (HTML)',
+  'results.downloadCsv': 'CSV downloaden',
+  'results.open': 'Verslag openen',
+  'results.fileName': ({ date, extension }) => `debat-${date}.${extension}`,
+
+  'report.title': 'Debatverslag',
+  'report.summary': ({ count }) =>
+    count === 1 ? '1 debat met resultaten' : `${n(count)} debatten met resultaten`,
+  'report.saveNote':
+    'Dit bestand is ook een bewaarbestand: om verder te gaan met deze debatten, of om ze te verbeteren, open je het in de app onder Debatten en teams, met Verslag openen.',
+  'report.none': 'Nog geen enkel debat heeft resultaten.',
+  'report.notFinished': 'Niet afgewerkt',
+  'report.whoSpoke': 'Wie sprak er',
+  'report.student': 'Leerling',
+  'report.speeches': 'Spreekbeurten',
+  'report.freeRound': 'Vrije ronde',
+  'report.turns': 'Beurten',
+  'report.noNames': 'Geen namen',
+  'report.time': 'Tijd per stap',
+  'report.step': 'Stap',
+  'report.planned': 'Gepland',
+  'report.used': 'Gebruikt',
+  'report.difference': 'Verschil',
+  'report.overtime': ({ time }) => `+${time} overtijd`,
+  'report.early': ({ time }) => `${time} vroeger gestopt`,
+  'report.onTime': 'op tijd',
+  'report.notUsed': 'niet gebruikt',
+  'report.balance': ({ step }) => `${step}: verhouding tussen de teams`,
+  'report.side': 'Kant',
+  'report.timeUsed': 'Gebruikte tijd',
+  'report.share': 'Aandeel',
+  'report.teamTurns': 'Teambeurten',
+  'report.vote': 'Stemming van het publiek',
+  'report.notCounted': 'niet geteld',
+  'report.shareFor': ({ side }) => `Aandeel ${side}`,
+
+  'csv.debate': 'Debat',
+  'csv.topic': 'Stelling',
+  'csv.side': 'Kant',
+  'csv.student': 'Leerling',
+  'csv.team': 'Teamleden',
+  'csv.turns': 'Beurten',
+  'csv.planned': ({ step }) => `${step} gepland (s)`,
+  'csv.used': ({ step }) => `${step} gebruikt (s)`,
+  'csv.left': ({ step }) => `${step} rest (s)`,
+  'csv.overtime': ({ step }) => `${step} overtijd (s)`,
+  'csv.teamTurns': ({ step }) => `${step} teambeurten`,
+  'csv.votesBefore': ({ side }) => `Stemmen ${side} vooraf`,
+  'csv.votesAfter': ({ side }) => `Stemmen ${side} achteraf`,
+  'csv.shiftVotes': ({ side }) => `Verschuiving ${side} (stemmen)`,
+  'csv.shiftPoints': ({ side }) => `Verschuiving ${side} (pp)`,
+  'csv.done': 'Afgerond',
+  'csv.yes': 'ja',
+  'csv.no': 'nee',
+
+  'loadReport.eyebrow': '// Verslag',
+  'loadReport.reading': 'Het verslag wordt gelezen…',
+  'loadReport.title': 'Dit verslag laden?',
+  'loadReport.fromFile': ({ name }) =>
+    `Dit verslag komt uit het bestand ‘${name}’. Er verandert niets tot je kiest om het te laden.`,
+  'loadReport.invalid.intro': 'Er zit geen verslag in dat deze app kan lezen.',
+  'loadReport.debates': 'Debatten in het verslag',
+  'loadReport.noDebates': 'Dit verslag heeft geen debatten.',
+  'loadReport.replaces': ({ debates, results }) => {
+    if (debates === 0) return 'Laden vervangt de opzet in deze browser.';
+    const what =
+      debates === 1
+        ? `het debat in deze browser${results > 0 ? ', met zijn resultaten' : ''}`
+        : `de ${n(debates)} debatten in deze browser${results === 0 ? '' : results === 1 ? ', waarvan één met resultaten' : `, waarvan ${n(results)} met resultaten`}`;
+    const keep = results > 0 ? ' Download daar eerst een verslag van om ze te bewaren.' : '';
+    return `Laden vervangt de opzet en ${what}.${keep}`;
+  },
+  'loadReport.load': 'Verslag laden',
 
   'share.intro':
     'Deel deze opzet met een collega, bewaar hem voor volgend jaar of zet hem op een cursuspagina. Een link of een bestand bevat de stellingen en de debatvorm, en niets anders: namen, tijden, stemmen en scores blijven in deze browser.',

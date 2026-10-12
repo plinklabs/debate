@@ -53,3 +53,8 @@ export function formatDuration(
   if (seconds > 0 || minutes === 0) parts.push(unit('second', seconds));
   return parts.join(' ');
 }
+
+/** A day as the language writes it in full: `12 October 2026`, `12 oktober 2026`. */
+export function formatDate(locale: Locale, date: Date): string {
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'long' }).format(date);
+}

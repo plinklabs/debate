@@ -3,10 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { setStepSeconds, setTopicText } from './model/edit';
 import { GRAFFITI_PRESET } from './model/presets';
-import { initialState, reducer, type Action } from './model/reducer';
+import { freeze, initialState, reducer, type Action } from './model/reducer';
+import { savedStateScript } from './model/reportFile';
 import { configFileText, encodeConfig } from './model/share';
 import { STORAGE_KEY, saveState } from './model/storage';
 import { renderWithI18n } from './test/i18n';
+import { playedSession } from './test/playedSession';
 
 afterEach(() => {
   localStorage.clear();
@@ -160,6 +162,26 @@ describe('App', () => {
     expect(within(debate).getByText('Finished')).toBeInTheDocument();
     expect(within(debate).getByRole('button', { name: 'Open' })).toHaveFocus();
     expect(stored().session).toMatchObject({ current: null, debates: [{ done: true }] });
+    // The results offer the report of it.
+    const results = screen.getByRole('region', { name: 'Results' });
+    expect(within(results).getByText('Debate 1 is finished.')).toBeInTheDocument();
+    expect(
+      within(results).getByRole('button', { name: 'Download report (HTML)' }),
+    ).toBeInTheDocument();
+    expect(within(results).getByRole('button', { name: 'Download CSV' })).toBeInTheDocument();
+
+    // Only right after finishing it.
+    fireEvent.click(screen.getByRole('tab', { name: 'Topics' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Debates and teams' }));
+    expect(screen.queryByText('Debate 1 is finished.')).not.toBeInTheDocument();
+  });
+
+  it('does not say a debate is finished when it was only left', () => {
+    storeReadyDebate();
+    renderWithI18n(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    fireEvent.click(screen.getByRole('button', { name: /Back to the setup/ }));
+    expect(screen.queryByText(/is finished/)).not.toBeInTheDocument();
   });
 });
 
@@ -396,5 +418,81 @@ describe('a shared setup in the app', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Version: This field is missing.');
     fireEvent.click(screen.getByRole('button', { name: 'Continue to the app' }));
     expect(screen.getByRole('tab', { name: 'Share' })).toHaveAttribute('aria-selected', 'true');
+  });
+});
+
+describe('a report in the app', () => {
+  const heading = () => screen.getByRole('heading', { level: 1 });
+
+  /** A report file as the app writes it, holding `state`. */
+  function reportFile(state = playedSession(), name = 'debate-2026-10-12.html') {
+    const html = `<!doctype html><html><body><h1>Debate report</h1>${savedStateScript(state, 0)}</body></html>`;
+    return new File([html], name, { type: 'text/html' });
+  }
+
+  function openReport(container: HTMLElement, file: File) {
+    fireEvent.click(screen.getByRole('tab', { name: 'Debates and teams' }));
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+    if (input === null) throw new Error('No file input');
+    fireEvent.change(input, { target: { files: [file] } });
+  }
+
+  it('shows a report first, and loads its setup and debates when asked', async () => {
+    storeReadyDebate();
+    const loaded = playedSession(setTopicText(GRAFFITI_PRESET.build('en'), 't1', 'Homework.'));
+    const { container } = renderWithI18n(<App />);
+    openReport(container, reportFile(loaded));
+
+    expect(await screen.findByRole('heading', { name: 'Load this report?' })).toHaveFocus();
+    expect(screen.getByRole('note')).toHaveTextContent(
+      'Loading it replaces the setup and the one debate in this browser.',
+    );
+    // Nothing has changed yet.
+    expect(stored().session.debates).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load report' }));
+
+    expect(heading()).toHaveTextContent('Debate — by Plink Labs');
+    expect(heading()).toHaveFocus();
+    expect(screen.getByRole('tab', { name: 'Debates and teams' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(stored().config).toEqual(loaded.config);
+    expect(stored().session).toEqual(freeze(loaded, 0).session);
+    const debate = screen.getByRole('article', { name: 'Debate 1' });
+    expect(within(debate).getByText('Homework.')).toBeInTheDocument();
+    expect(within(debate).getByText('Finished')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Download report (HTML)' })).toBeInTheDocument();
+  });
+
+  it('leaves everything as it was when cancelled', async () => {
+    storeReadyDebate();
+    const before = stored();
+    const { container } = renderWithI18n(<App />);
+    openReport(container, reportFile());
+    await screen.findByRole('heading', { name: 'Load this report?' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(heading()).toHaveTextContent('Debate — by Plink Labs');
+    expect(stored()).toEqual(before);
+  });
+
+  it('says what is wrong with a file that is not a report', async () => {
+    const { container } = renderWithI18n(<App />);
+    const before = stored();
+    openReport(container, new File(['<p>Holiday photos</p>'], 'photos.html'));
+
+    expect(
+      await screen.findByRole('heading', { name: 'This file cannot be used' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('This is not a report made by this app');
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to the app' }));
+    expect(screen.getByRole('tab', { name: 'Debates and teams' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(stored()).toEqual(before);
   });
 });

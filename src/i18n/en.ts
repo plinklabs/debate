@@ -41,6 +41,7 @@ const issues: IssueMessages = {
   'issue.invalid-link': () =>
     'This link is damaged or incomplete. Copy the whole link again, or ask for a new one.',
   'issue.too-large': () => 'This is too large to be a setup.',
+  'issue.not-a-report': () => 'This is not a report made by this app: it holds no debates to load.',
   'issue.newer-version': ({ found, supported }) =>
     `This setup was made with a newer version of the app (version ${n(found)}; this one reads up to version ${n(supported)}). Reload the page to get the latest version.`,
   'issue.invalid-version': () => 'This setup has no valid version number.',
@@ -160,6 +161,93 @@ export const en = {
   'debates.remove': ({ number }: { number: number }) => `Remove debate ${n(number)}`,
   'debates.remove.question': 'Remove this debate, with its names and results?',
   'debates.remove.confirm': 'Remove debate',
+
+  // Results: the report of every debate with results, as an HTML file that
+  // is also a save file, and as a CSV file for a spreadsheet (#7).
+  'results.title': 'Results',
+  'results.intro':
+    'The report holds every debate with results: one file that opens in any browser and prints on A4. Open it here again to go on with the debates. The CSV file is for a spreadsheet.',
+  'results.none':
+    'No results yet. A report you made earlier can be opened here, to go on with its debates.',
+  'results.finished': ({ number }: { number: number }) => `Debate ${n(number)} is finished.`,
+  'results.downloadReport': 'Download report (HTML)',
+  'results.downloadCsv': 'Download CSV',
+  'results.open': 'Open a report',
+  // The name of a downloaded report or CSV file; `date` is 2026-10-12.
+  'results.fileName': ({ date, extension }: { date: string; extension: string }) =>
+    `debate-${date}.${extension}`,
+
+  // The report itself, an HTML file.
+  'report.title': 'Debate report',
+  'report.summary': ({ count }: { count: number }) =>
+    count === 1 ? '1 debate with results' : `${n(count)} debates with results`,
+  'report.saveNote':
+    'This file is also a save file: to go on with these debates, or to correct them, open it in the app under Debates and teams, with Open a report.',
+  'report.none': 'No debate has results yet.',
+  'report.notFinished': 'Not finished',
+  'report.whoSpoke': 'Who spoke',
+  'report.student': 'Student',
+  'report.speeches': 'Speeches',
+  'report.freeRound': 'Free round',
+  'report.turns': 'Turns',
+  'report.noNames': 'No names',
+  'report.time': 'Time per step',
+  'report.step': 'Step',
+  'report.planned': 'Planned',
+  'report.used': 'Used',
+  'report.difference': 'Difference',
+  'report.overtime': ({ time }: { time: string }) => `+${time} over time`,
+  'report.early': ({ time }: { time: string }) => `stopped ${time} early`,
+  'report.onTime': 'on time',
+  'report.notUsed': 'not used',
+  'report.balance': ({ step }: { step: string }) => `${step}: balance between the teams`,
+  'report.side': 'Side',
+  'report.timeUsed': 'Time used',
+  'report.share': 'Share',
+  'report.teamTurns': 'Team turns',
+  'report.vote': 'Audience vote',
+  'report.notCounted': 'not counted',
+  'report.shareFor': ({ side }: { side: string }) => `Share ${side}`,
+
+  // Columns of the CSV file: one row per student.
+  'csv.debate': 'Debate',
+  'csv.topic': 'Topic',
+  'csv.side': 'Side',
+  'csv.student': 'Student',
+  'csv.team': 'Team members',
+  'csv.turns': 'Turns',
+  'csv.planned': ({ step }: { step: string }) => `${step} planned (s)`,
+  'csv.used': ({ step }: { step: string }) => `${step} used (s)`,
+  'csv.left': ({ step }: { step: string }) => `${step} left (s)`,
+  'csv.overtime': ({ step }: { step: string }) => `${step} overtime (s)`,
+  'csv.teamTurns': ({ step }: { step: string }) => `${step} team turns`,
+  'csv.votesBefore': ({ side }: { side: string }) => `Votes ${side} before`,
+  'csv.votesAfter': ({ side }: { side: string }) => `Votes ${side} after`,
+  'csv.shiftVotes': ({ side }: { side: string }) => `Shift ${side} (votes)`,
+  'csv.shiftPoints': ({ side }: { side: string }) => `Shift ${side} (pp)`,
+  'csv.done': 'Finished',
+  'csv.yes': 'yes',
+  'csv.no': 'no',
+
+  // A report opened in the app, shown before it replaces what is here.
+  'loadReport.eyebrow': '// Report',
+  'loadReport.reading': 'Reading the report…',
+  'loadReport.title': 'Load this report?',
+  'loadReport.fromFile': ({ name }: { name: string }) =>
+    `This report comes from the file “${name}”. Nothing changes until you choose to load it.`,
+  'loadReport.invalid.intro': 'It does not hold a report that this app can read.',
+  'loadReport.debates': 'Debates in the report',
+  'loadReport.noDebates': 'This report has no debates.',
+  'loadReport.replaces': ({ debates, results }: { debates: number; results: number }) => {
+    if (debates === 0) return 'Loading it replaces the setup in this browser.';
+    const what =
+      debates === 1
+        ? `the one debate in this browser${results > 0 ? ', with its results' : ''}`
+        : `the ${n(debates)} debates in this browser${results === 0 ? '' : results === 1 ? ', one of them with results' : `, ${n(results)} of them with results`}`;
+    const keep = results > 0 ? ' Download a report of those first to keep them.' : '';
+    return `Loading it replaces the setup and ${what}.${keep}`;
+  },
+  'loadReport.load': 'Load report',
 
   // Share: the setup (topics and format) as a link or a file.
   'share.intro':

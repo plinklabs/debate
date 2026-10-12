@@ -22,7 +22,8 @@ import { clampVotes, type Votes } from './votes';
 
 export const STORAGE_KEY = 'plinklabs:debate:v1';
 
-const STORAGE_VERSION = 1;
+/** The version of what is stored, and of the saved state inside a report (reportFile.ts). */
+export const STORAGE_VERSION = 1;
 
 /** The part of the Web Storage API this needs; `window.localStorage` fits. */
 export interface KeyValueStore {
@@ -136,7 +137,12 @@ function readVotes(value: unknown): Votes {
   return { pro: clampVotes(count(votes.pro)), con: clampVotes(count(votes.con)) };
 }
 
-function readSession(value: unknown): Session {
+/**
+ * A session from outside the app's own code (storage, a report file), read
+ * defensively: what does not have the expected shape is dropped, every timer
+ * comes back paused, names and counts are cut to their limits.
+ */
+export function readSession(value: unknown): Session {
   const data = objectOr(value);
   const debates: Debate[] = [];
   for (const item of listOr(data.debates)) {

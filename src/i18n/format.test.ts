@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { formatDuration, formatNumber } from './format';
+import { formatDate, formatDuration, formatNumber } from './format';
 
 describe('formatNumber', () => {
   it('uses a decimal point in English and a decimal comma in Dutch', () => {
@@ -49,5 +49,13 @@ describe('formatDuration', () => {
   it('rounds to whole seconds', () => {
     expect(formatDuration('en', 59.6)).toBe('1 min');
     expect(formatDuration('en', 89.4)).toBe('1 min 29 sec');
+  });
+});
+
+describe('formatDate', () => {
+  it('writes a day in full, as the language does', () => {
+    const day = new Date(2026, 9, 12, 9, 30);
+    expect(formatDate('en', day)).toBe('October 12, 2026');
+    expect(formatDate('nl', day)).toBe('12 oktober 2026');
   });
 });

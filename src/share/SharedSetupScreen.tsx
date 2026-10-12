@@ -101,7 +101,7 @@ export function SharedSetupScreen({ incoming, state, onUse, onClose }: Props) {
 }
 
 /** The topics and the format, as they would be used. */
-function Contents({ config }: { readonly config: DebateConfig }) {
+export function Contents({ config }: { readonly config: DebateConfig }) {
   const { t, formatDuration, formatNumber } = useI18n();
   const prefix = useId();
   const { format, topics } = config;
@@ -201,7 +201,7 @@ function Impact({ impact }: { readonly impact: ReplaceImpact }) {
 }
 
 /** What is wrong, where it is known: "Topic 3: This cannot be empty." */
-function Problems({ issues }: { readonly issues: readonly ConfigIssue[] }) {
+export function Problems({ issues }: { readonly issues: readonly ConfigIssue[] }) {
   const { t, describeIssue } = useI18n();
   const lines = new Map<string, { place: string | null; text: string }>();
   for (const issue of issues) {

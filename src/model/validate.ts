@@ -34,6 +34,8 @@ export type ConfigIssue =
   | { readonly code: 'invalid-link'; readonly path: IssuePath }
   /** A link or a file larger than any setup can be (share.ts). */
   | { readonly code: 'too-large'; readonly path: IssuePath }
+  /** A file that holds no saved session this app can read: not a report it made (reportFile.ts). */
+  | { readonly code: 'not-a-report'; readonly path: IssuePath }
   /** Made by a newer version of the app. */
   | {
       readonly code: 'newer-version';

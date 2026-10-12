@@ -338,6 +338,21 @@ describe('debates and teams', () => {
     const s = apply(withTeams(), { type: 'reset-session' });
     expect(s).toEqual(initialState(config));
   });
+
+  it('replaces the setup and the session with a loaded state', () => {
+    const other = GRAFFITI_PRESET.build('en');
+    const loaded: AppState = {
+      config: other,
+      session: {
+        debates: withTeams().session.debates.map((d) => ({ ...d, done: true })),
+        current: null,
+      },
+    };
+    const running = apply(withTeams(), { type: 'open-debate', debateId: 'd1', now: at(0) });
+    const s = reducer(running, { type: 'load-state', state: loaded });
+    expect(s).toEqual(loaded);
+    expect(anyRunning(s)).toBe(false);
+  });
 });
 
 describe('stepping through a debate', () => {

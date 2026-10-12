@@ -4,6 +4,7 @@ import { GRAFFITI_PRESET } from './presets';
 import { initialState, reducer, type Action, type AppState } from './reducer';
 import {
   clocksOf,
+  debateStatus,
   debatedTopicIds,
   hasResults,
   newDebate,
@@ -57,6 +58,21 @@ describe('hasResults', () => {
       }),
     ).toBe(true);
     expect(hasResults({ ...debate, done: true })).toBe(true);
+  });
+});
+
+describe('debateStatus', () => {
+  it('is incomplete, ready, started or done, in that order of progress', () => {
+    const debate = newDebate('d1', 't1', format);
+    expect(debateStatus(format, debate)).toBe('incomplete');
+    const ready = { ...debate, teams: { pro: ['Ann', 'Bert', ''], con: ['Dirk', 'Eva', ''] } };
+    expect(debateStatus(format, ready)).toBe('ready');
+    const started: Debate = {
+      ...ready,
+      records: { 'vote-before': { type: 'vote-before', votes: { pro: 1, con: 2 } } },
+    };
+    expect(debateStatus(format, started)).toBe('started');
+    expect(debateStatus(format, { ...debate, done: true })).toBe('done');
   });
 });
 
