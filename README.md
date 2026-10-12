@@ -47,6 +47,8 @@ Every change must pass these. CI runs them in this order:
   `dist/` on port 4173 (a server already running there is reused); in CI it serves the
   build from the previous step. When e2e fails in CI, the Playwright report is uploaded as
   the `playwright-report` artifact; locally, open it with `npx playwright show-report`.
+  Checks shared by the specs live in `e2e/helpers.ts` (not a spec, so Playwright doesn't
+  run it): `expectFits(page)` fails on sideways scrolling or rendered text under 16px.
 - **Config:** `.prettierrc.json`, `.oxlintrc.json`, `tsconfig.json` (app) and
   `tsconfig.node.json` (Playwright), `vite.config.ts` (Vitest), `playwright.config.ts`.
 - The linter is oxlint rather than ESLint because typescript-eslint needs the TypeScript

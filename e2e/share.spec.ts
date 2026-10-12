@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { deflateRawSync, inflateRawSync } from 'node:zlib';
+import { expectFits } from './helpers';
 
 // Sharing a setup end to end: as a link opened in another browser, as a file
 // downloaded and opened again, and what a broken or newer link or file says.
@@ -57,33 +58,6 @@ async function seedDebateWithResults(page: Page) {
     { key: STORAGE_KEY, names: NAMES },
   );
   await page.reload();
-}
-
-/**
- * No sideways scrolling, and no text under the 16px projector floor (as in
- * setup.spec.ts, but only on what is rendered: the Share panel's file input is
- * hidden behind its button).
- */
-async function expectFits(page: Page) {
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  );
-  expect(overflow).toBe(0);
-  const tooSmall = await page.evaluate(() => {
-    const found: string[] = [];
-    for (const element of document.body.querySelectorAll('*')) {
-      if (!element.checkVisibility()) continue;
-      const hasText = [...element.childNodes].some(
-        (node) => node.nodeType === Node.TEXT_NODE && (node.textContent ?? '').trim() !== '',
-      );
-      const isControl = element.matches('input, textarea, select, button');
-      if (!hasText && !isControl) continue;
-      const size = parseFloat(getComputedStyle(element).fontSize);
-      if (size < 16) found.push(`${element.tagName} “${element.textContent?.trim()}”: ${size}px`);
-    }
-    return found;
-  });
-  expect(tooSmall).toEqual([]);
 }
 
 test.describe('in an English browser', () => {
