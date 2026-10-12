@@ -33,12 +33,13 @@ Every change must pass these. CI runs them in this order:
 | `npm run format:check` | Prettier formatting (`npm run format` fixes it)                             |
 | `npm run lint`         | oxlint: correctness, TypeScript, React and react-hooks rules; warnings fail |
 | `npm run typecheck`    | `tsc` over the app and over the Playwright config and tests                 |
-| `npm test`             | Component tests (Vitest, jsdom, React Testing Library)                      |
+| `npm test`             | Unit and component tests (Vitest, jsdom, React Testing Library)             |
 | `npm run build`        | Type-check and production build to `dist/`                                  |
 | `npm run e2e`          | End-to-end tests (Playwright, Chromium, desktop and phone size)             |
 
-- **Component tests** sit next to the code as `src/**/*.test.tsx`. The jest-dom matchers
-  are set up in `src/test/setup.ts`.
+- **Unit and component tests** sit next to the code as `src/**/*.test.{ts,tsx}`. The
+  jest-dom matchers are set up in `src/test/setup.ts`. The debate model in `src/model/`
+  has no React or DOM, so its tests run in plain Node (`// @vitest-environment node`).
 - **End-to-end tests** live in `e2e/*.spec.ts` and run against the production build,
   served by `vite preview` under the `/debate/` base path. Use relative URLs
   (`page.goto('./')`) so they resolve under `/debate/`. Install the browser once with
