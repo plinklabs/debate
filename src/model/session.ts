@@ -124,6 +124,37 @@ export function stepIndexOf(format: Format, debate: Debate): number {
   return Math.max(0, Math.min(debate.step, format.steps.length - 1));
 }
 
+/**
+ * How many name slots a side has on screen: the format's largest team, or
+ * more when names are left in slots beyond it (the team size went down after
+ * they were typed), so those can still be seen and cleared.
+ */
+export function slotCount(format: Format, teams: Teams, side: Side): number {
+  const filled = teams[side].reduce(
+    (last, name, slot) => (name.trim() === '' ? last : slot + 1),
+    0,
+  );
+  return Math.max(format.teamSize.max, filled);
+}
+
+/** A debate has results once anything was recorded in it, or once it was finished. */
+export function hasResults(debate: Debate): boolean {
+  return debate.done || Object.keys(debate.records).length > 0;
+}
+
+/** The topics that debates are about, by id. */
+export function debatedTopicIds(session: Session): Set<string> {
+  return new Set(session.debates.map((debate) => debate.topicId));
+}
+
+/**
+ * Ids of steps that have something recorded in some debate. A new step must
+ * not take one of these, or it would show results that are not its own.
+ */
+export function recordedStepIds(session: Session): Set<string> {
+  return new Set(session.debates.flatMap((debate) => Object.keys(debate.records)));
+}
+
 // ---------------------------------------------------------------------------
 // Records
 // ---------------------------------------------------------------------------

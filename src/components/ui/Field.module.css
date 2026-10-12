@@ -1,0 +1,102 @@
+/* Plink Labs input: hairline border, paper fill, crisp radius, magenta focus
+   ring. Labels in mono, at the 16px floor rather than the 12px of the design
+   system, so they stay readable on a projector. */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.label {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  letter-spacing: var(--label-tracking-tight);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.control {
+  width: 100%;
+  min-height: 2.75rem;
+  margin: 0;
+  padding: 0.6rem 0.85rem;
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: var(--body-lh);
+  transition:
+    border-color var(--dur-fast) var(--ease-standard),
+    box-shadow var(--dur-fast) var(--ease-standard);
+}
+
+.control::placeholder {
+  color: var(--text-caption);
+  opacity: 1;
+}
+
+.control:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+
+.control:focus,
+.control:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(219, 39, 119, 0.18);
+}
+
+.control:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Grows with its text where the browser can; two rows where it cannot. */
+.textarea {
+  resize: vertical;
+}
+
+@supports (field-sizing: content) {
+  .textarea {
+    min-height: 2.75rem;
+    field-sizing: content;
+  }
+}
+
+.select {
+  appearance: none;
+  padding-right: 2.25rem;
+  /* A hairline chevron in ink (#1B1B23). */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%231B1B23' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-position: right 0.85rem center;
+  background-size: 0.75rem 0.5rem;
+  background-repeat: no-repeat;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.invalid,
+.invalid:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.hint {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.errors:empty {
+  display: none;
+}
+
+.error {
+  margin: 0;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--accent);
+  color: var(--text);
+  font-weight: var(--body-weight-medium);
+}

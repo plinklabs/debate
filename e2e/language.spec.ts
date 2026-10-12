@@ -29,12 +29,12 @@ test.describe('in an English browser', () => {
   test('switches to Dutch and back, and remembers the choice after a reload', async ({ page }) => {
     await page.goto('./');
     await expectLanguage(page, 'en');
-    await expect(page.getByText('// Work in progress')).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Topics' })).toBeVisible();
 
     await languageButton(page, 'Nederlands').click();
 
     await expectLanguage(page, 'nl');
-    await expect(page.getByText('// In aanbouw')).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Stellingen' })).toBeVisible();
     await expect(page.getByText(/^Stellingen, teams, spreektijden/)).toBeVisible();
 
     await page.reload();

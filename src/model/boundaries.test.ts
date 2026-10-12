@@ -8,8 +8,8 @@ const sources = import.meta.glob(['./*.ts', '!./*.test.ts'], {
   eager: true,
 });
 
-/** Modules that make up a shareable config (link, file). */
-const SHAREABLE = ['./config.ts', './validate.ts', './presets.ts', './locale.ts'];
+/** Modules that make up a shareable config (link, file), or only work on one. */
+const SHAREABLE = ['./config.ts', './validate.ts', './presets.ts', './locale.ts', './edit.ts'];
 
 function withoutComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');

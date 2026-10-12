@@ -283,6 +283,26 @@ describe('debates and teams', () => {
     expect(debateOf(s).teams.con[2]).toHaveLength(40);
   });
 
+  it('lets a name left beyond a smaller team size be cleared', () => {
+    let s = withTeams();
+    s = reducer(s, {
+      type: 'set-config',
+      config: { ...config, format: { ...format, teamSize: { min: 2, max: 2 } } },
+      now: at(0),
+    });
+    // Ann, Bert and Cas are one too many now.
+    expect(isPlayable(s.config.format, debateOf(s))).toBe(false);
+
+    s = reducer(s, { type: 'set-name', debateId: 'd1', side: 'pro', slot: 2, name: '' });
+    expect(debateOf(s).teams.pro).toEqual(['Ann', 'Bert', '']);
+    expect(isPlayable(s.config.format, debateOf(s))).toBe(true);
+
+    // A slot the team never had stays out of reach.
+    const before = s;
+    s = reducer(s, { type: 'set-name', debateId: 'd1', side: 'pro', slot: 3, name: 'Fien' });
+    expect(s).toBe(before);
+  });
+
   it('starts a debate only when both teams are complete', () => {
     const open: Action = { type: 'open-debate', debateId: 'd1', now: at(0) };
     let s = apply(

@@ -1,6 +1,6 @@
 import { expect, test, type Response } from '@playwright/test';
 
-// The families the placeholder page uses, as fontsource names them
+// The families the setup screen uses, as fontsource names them
 // (display, body and mono; see src/styles/fonts.css).
 const SELF_HOSTED_FAMILIES = ['Fraunces Variable', 'Hanken Grotesk Variable', 'Space Mono'];
 

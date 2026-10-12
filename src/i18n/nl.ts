@@ -61,9 +61,87 @@ export const nl: Dictionary = {
   'language.name': 'Nederlands',
   'language.code': 'NL',
 
-  'placeholder.status': '// In aanbouw',
-  'placeholder.lede':
+  'action.cancel': 'Annuleren',
+  'action.remove': 'Verwijderen',
+
+  'setup.eyebrow': '// Opzet',
+  'setup.lede':
     'Stellingen, teams, spreektijden en een stemming van het publiek, om een debat in de klas te houden. Alles blijft in je browser.',
+  'setup.areas': 'Delen van de opzet',
+  'setup.tab.topics': 'Stellingen',
+  'setup.tab.format': 'Debatvorm',
+  'setup.tab.debates': 'Debatten en teams',
+
+  'topics.intro':
+    'De stellingen waarover de klas debatteert. Meerdere debatten kunnen dezelfde stelling gebruiken.',
+  'topics.label': ({ number }) => `Stelling ${n(number)}`,
+  'topics.moveUp': ({ number }) => `Stelling ${n(number)} naar boven`,
+  'topics.moveDown': ({ number }) => `Stelling ${n(number)} naar beneden`,
+  'topics.remove': ({ number }) => `Stelling ${n(number)} verwijderen`,
+  'topics.inUse': ({ count }) =>
+    count === 1 ? 'Gebruikt in 1 debat.' : `Gebruikt in ${n(count)} debatten.`,
+  'topics.new': 'Nieuwe stelling',
+  'topics.add': 'Stelling toevoegen',
+
+  'format.intro':
+    'De kanten, de grootte van de teams en de stappen van een debat. Elk debat in deze opzet volgt ze.',
+  'format.total': 'Totale tijd',
+  'format.stepCount': 'Aantal stappen',
+  'format.locked': ({ count }) =>
+    `${count === 1 ? 'Eén debat heeft al resultaten' : `${n(count)} debatten hebben al resultaten`}. Een wijziging aan de debatvorm verandert hoe die te lezen zijn: een stap die je verwijdert, valt eruit, en een nieuwe duur verandert de geplande tijd.`,
+  'format.unlock': 'Debatvorm toch wijzigen',
+  'format.preset': 'Sjabloon',
+  'format.usePreset': 'Dit sjabloon gebruiken',
+  'format.usePreset.question':
+    'Dit vervangt de kanten, de teamgrootte en alle stappen. De stellingen blijven.',
+  'format.usePreset.confirm': 'Debatvorm vervangen',
+  'format.sides': 'Kanten',
+  'format.side.pro': 'Voor de stelling',
+  'format.side.con': 'Tegen de stelling',
+  'format.teamSize': 'Leerlingen per team',
+  'format.teamSize.min': 'Minstens',
+  'format.teamSize.max': 'Hoogstens',
+  'format.steps': 'Stappen',
+  'format.step': ({ number }) => `Stap ${n(number)}`,
+  'format.step.type': 'Soort',
+  'format.step.label': 'Titel',
+  'format.step.side': 'Kant',
+  'format.step.seconds': 'Seconden',
+  'format.step.secondsPerTeam': 'Seconden per team',
+  'format.step.vote': 'Het publiek stemt. Geen klok.',
+  'format.step.moveUp': ({ number }) => `Stap ${n(number)} naar boven`,
+  'format.step.moveDown': ({ number }) => `Stap ${n(number)} naar beneden`,
+  'format.step.remove': ({ number }) => `Stap ${n(number)} verwijderen`,
+  'format.addStep': 'Stap toevoegen',
+
+  'debates.intro':
+    'Een debat is één stelling met een team aan elke kant. Het kan beginnen zodra beide teams volledig zijn.',
+  'debates.topic': 'Stelling',
+  'debates.add': 'Debat toevoegen',
+  'debates.none': 'Nog geen debatten. Kies een stelling en voeg er een toe.',
+  'debates.label': ({ number }) => `Debat ${n(number)}`,
+  'debates.topicGone': 'Deze stelling zit niet meer in de opzet.',
+  'debates.name': ({ number }) => `Naam ${n(number)}`,
+  'debates.nameOptional': ({ number }) => `Naam ${n(number)} (mag leeg)`,
+  'debates.team.complete': 'Volledig',
+  'debates.team.tooFew': ({ min }) =>
+    min === 1 ? 'Nog geen naam' : `Minstens ${n(min)} namen nodig`,
+  'debates.team.tooMany': ({ max }) =>
+    max === 1 ? 'Hoogstens één naam' : `Hoogstens ${n(max)} namen`,
+  'debates.status.ready': 'Klaar',
+  'debates.status.incomplete': 'Teams onvolledig',
+  'debates.status.started': 'Begonnen',
+  'debates.status.done': 'Afgewerkt',
+  'debates.start': 'Beginnen',
+  'debates.continue': 'Verdergaan',
+  'debates.open': 'Openen',
+  'debates.remove': ({ number }) => `Debat ${n(number)} verwijderen`,
+  'debates.remove.question': 'Dit debat verwijderen, met de namen en resultaten?',
+  'debates.remove.confirm': 'Debat verwijderen',
+
+  'debate.pending':
+    'Het debatscherm is nog in aanbouw. Het toont straks de stappen, een grote klok en de stemming.',
+  'debate.back': 'Terug naar de opzet',
 
   ...stepTypes,
   ...issues,

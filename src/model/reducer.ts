@@ -134,9 +134,15 @@ export function reducer(state: AppState, action: Action): AppState {
       });
     }
     case 'set-name':
-      if (!isSlot(action.slot, state.config.format.teamSize.max)) return state;
+      // A slot of the format, or one the team already has: names left beyond a
+      // team size that went down can still be corrected or cleared.
       return updateDebate(state, action.debateId, (debate) =>
-        setName(debate, action.side, action.slot, action.name),
+        isSlot(
+          action.slot,
+          Math.max(state.config.format.teamSize.max, debate.teams[action.side].length),
+        )
+          ? setName(debate, action.side, action.slot, action.name)
+          : debate,
       );
     case 'open-debate': {
       const debate = findDebate(state.session, action.debateId);
