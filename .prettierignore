@@ -1,0 +1,11 @@
+# Vendored from plinklabs/plink-design-system; replace, don't reformat.
+src/styles/plink/
+
+package-lock.json
+dist/
+playwright-report/
+test-results/
+
+# Canonical copies from the bootstrap-github skill; keep verbatim.
+.github/ISSUE_TEMPLATE/
+.github/pull_request_template.md
