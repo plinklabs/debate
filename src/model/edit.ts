@@ -23,6 +23,9 @@ import {
 /** Seconds of a new timed step, and of a step that becomes timed. */
 export const NEW_STEP_SECONDS = 60;
 
+/** Seconds in each team's bank when prep time is switched on: 4 minutes, as in the Karl Popper preset. */
+export const NEW_PREP_SECONDS = 240;
+
 /** The item with this id moved `offset` places; the list itself when that is not possible. */
 function moveItem<T extends { readonly id: string }>(
   items: readonly T[],
@@ -96,6 +99,18 @@ export function setTeamSize(
   return { ...config, format: { ...format, teamSize: { ...format.teamSize, [bound]: value } } };
 }
 
+/**
+ * The prep-time bank with this many seconds per team, or no bank at all for
+ * `null`. Without a bank the format has no `prepTime` field, as before #8.
+ */
+export function setPrepTime(config: DebateConfig, secondsPerTeam: number | null): DebateConfig {
+  const { prepTime: _, ...format } = config.format;
+  return {
+    ...config,
+    format: secondsPerTeam === null ? format : { ...format, prepTime: { secondsPerTeam } },
+  };
+}
+
 function withSteps(config: DebateConfig, steps: readonly Step[]): DebateConfig {
   return { ...config, format: { ...config.format, steps } };
 }
@@ -134,16 +149,22 @@ export function moveStep(config: DebateConfig, id: string, offset: number): Deba
 /**
  * The step as another type. It keeps its id and label, and its side and
  * duration where the new type has them; a step that becomes timed gets
- * `NEW_STEP_SECONDS`, a speech that had no side speaks for `pro`.
+ * `NEW_STEP_SECONDS`, a speech or a cross-examination that had no side is
+ * for `pro`. A speech that becomes a cross-examination asks for its side, and
+ * the other way round.
  */
 export function withStepType(step: Step, type: StepType): Step {
   const { id, label } = step;
   const seconds = stepSeconds(step) ?? NEW_STEP_SECONDS;
+  const side = stepSide(step) ?? 'pro';
   switch (type) {
     case 'speech':
-      return { id, label, type, side: stepSide(step) ?? 'pro', seconds };
+      return { id, label, type, side, seconds };
+    case 'cross-examination':
+      return { id, label, type, askingSide: side, seconds };
     case 'consultation':
     case 'free-round':
+    case 'audience-questions':
       return { id, label, type, seconds };
     case 'vote-before':
     case 'vote-after':
@@ -159,9 +180,22 @@ export function setStepLabel(config: DebateConfig, id: string, label: string): D
   return updateStep(config, id, (step) => ({ ...step, label }));
 }
 
-/** The side of a speech; other steps have none. */
+/** The side of a speech, or the side that asks in a cross-examination; other steps have none. */
 export function setStepSide(config: DebateConfig, id: string, side: Side): DebateConfig {
-  return updateStep(config, id, (step) => (step.type === 'speech' ? { ...step, side } : step));
+  return updateStep(config, id, (step): Step => {
+    switch (step.type) {
+      case 'speech':
+        return { ...step, side };
+      case 'cross-examination':
+        return { ...step, askingSide: side };
+      case 'consultation':
+      case 'free-round':
+      case 'audience-questions':
+      case 'vote-before':
+      case 'vote-after':
+        return step;
+    }
+  });
 }
 
 /** The duration of a timed step (per clock for a free round); a vote has none. */
@@ -173,6 +207,10 @@ export function setStepSeconds(config: DebateConfig, id: string, seconds: number
       case 'consultation':
         return { ...step, seconds };
       case 'free-round':
+        return { ...step, seconds };
+      case 'cross-examination':
+        return { ...step, seconds };
+      case 'audience-questions':
         return { ...step, seconds };
       case 'vote-before':
       case 'vote-after':

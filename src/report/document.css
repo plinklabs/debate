@@ -273,6 +273,17 @@ td.num {
   background: var(--ink);
 }
 
+/* Prep time: what each team's bank was, above its table. */
+.bank {
+  margin: 0 0 8px;
+  color: var(--muted);
+}
+
+/* Overtime under what was left, so the figures stay in one column. */
+.prep .mark {
+  display: block;
+}
+
 .shift {
   margin: 16px 0 0;
   font-family: var(--display);
@@ -356,6 +367,8 @@ td.num {
   tr,
   .teams table,
   .balance,
+  .answers,
+  .prep,
   .vote,
   .bar,
   .shift {

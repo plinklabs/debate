@@ -6,12 +6,13 @@
 // a time of day) and a decimal comma in Dutch. Excel with a Belgian or Dutch
 // locale then opens it without an import dialog.
 //
-// The columns follow the format: a group of columns for each step, in order.
+// The columns follow the format: a group of columns for each step, in order,
+// and the prep time of each team when the format has a bank.
 
 import { stepName } from '../debate/stepText';
 import { DICTIONARIES, translator, type Translate } from '../i18n/dictionary';
 import { formatNumber } from '../i18n/format';
-import { SIDES, type Format, type Side, type Step } from '../model/config';
+import { SIDES, stepSide, type Format, type Side, type Step } from '../model/config';
 import type { Locale } from '../model/locale';
 import type { AppState } from '../model/reducer';
 import {
@@ -82,7 +83,8 @@ export function csvOf(report: Report, locale: Locale): string {
       cell: ({ debate, side }) => csvText(debate.teams[side].map((m) => m.name).join(', ')),
     },
     { header: t('csv.turns'), cell: ({ member }) => (member === null ? '' : String(member.turns)) },
-    ...format.steps.flatMap((step, index) => stepColumns(step, index, c)),
+    ...stepNames(c).flatMap((name, index) => stepColumns(format.steps[index], index, name, c)),
+    ...prepColumns(c),
     { header: t('csv.done'), cell: ({ debate }) => (debate.done ? t('csv.yes') : t('csv.no')) },
   ];
 
@@ -103,28 +105,89 @@ export function csvOf(report: Report, locale: Locale): string {
 }
 
 /**
- * The columns of one step. The switch covers every kind of step: a new kind
- * (#8), or a jury step with scores (#10), needs its columns here.
+ * What the columns of each step are headed with: its name, and the side of a
+ * speech or the side that asks in a cross-examination. Two steps that would
+ * read the same, such as the two cross-examinations of each side in a Karl
+ * Popper debate, get their number in front, as in the report: `02 …`.
  */
-function stepColumns(step: Step, index: number, c: Context): Column[] {
+function stepNames({ t, format }: Context): string[] {
+  const names = format.steps.map((step) => {
+    const name = stepName(step, t);
+    const side = stepSide(step);
+    return side === null ? name : `${name} (${format.sides[side]})`;
+  });
+  return names.map((name, index) =>
+    names.indexOf(name) === names.lastIndexOf(name)
+      ? name
+      : `${String(index + 1).padStart(2, '0')} ${name}`,
+  );
+}
+
+/**
+ * The columns of one step, headed with `name` (`stepNames`). The switch covers
+ * every kind of step: a new kind, or a jury step with scores (#10), needs its
+ * columns here.
+ */
+function stepColumns(step: Step, index: number, name: string, c: Context): Column[] {
   const { t, format } = c;
   /** This step's result in the row's debate: the report lists the format's steps in order. */
   const resultOf = (row: Row): StepResult => row.debate.steps[index];
   switch (step.type) {
     case 'speech':
       // A speech belongs to one side: the other side's rows leave it empty.
-      return timingColumns(t, `${stepName(step, t)} (${format.sides[step.side]})`, (row) => {
+      return timingColumns(t, name, (row) => {
         const result = resultOf(row);
         return result.type === 'speech' && row.side === step.side ? result.clock : null;
       });
     case 'consultation':
-      return timingColumns(t, stepName(step, t), (row) => {
+      return timingColumns(t, name, (row) => {
         const result = resultOf(row);
         return result.type === 'consultation' ? result.clock : null;
       });
+    case 'cross-examination': {
+      // The clock is the asking side's, as a speech's is its side's; each
+      // student's part is a role: asked, answered, or none.
+      return [
+        ...timingColumns(t, name, (row) => {
+          const result = resultOf(row);
+          return result.type === 'cross-examination' && row.side === step.askingSide
+            ? result.clock
+            : null;
+        }),
+        {
+          header: t('csv.role', { step: name }),
+          cell: (row) => {
+            const result = resultOf(row);
+            const { member, side } = row;
+            if (result.type !== 'cross-examination' || member === null) return '';
+            const asking = side === step.askingSide;
+            const took = (asking ? result.askers : result.answerers).some(
+              (other) => other.slot === member.slot,
+            );
+            if (!took) return '';
+            return asking ? t('csv.role.asked') : t('csv.role.answered');
+          },
+        },
+      ];
+    }
+    case 'audience-questions': {
+      // One clock for everyone; the answers are the row's team's.
+      return [
+        ...timingColumns(t, name, (row) => {
+          const result = resultOf(row);
+          return result.type === 'audience-questions' ? result.clock : null;
+        }),
+        {
+          header: t('csv.answers', { step: name }),
+          cell: (row) => {
+            const result = resultOf(row);
+            return result.type === 'audience-questions' ? String(result.answers[row.side]) : '';
+          },
+        },
+      ];
+    }
     case 'free-round': {
       // A clock per team: each row has its own team's clock and turns.
-      const name = stepName(step, t);
       return [
         ...timingColumns(t, name, (row) => {
           const result = resultOf(row);
@@ -168,6 +231,15 @@ function stepColumns(step: Step, index: number, c: Context): Column[] {
       ];
     }
   }
+}
+
+/**
+ * Each row's team's prep time: its bank, what it used, what was left and its
+ * overtime, in whole seconds. None for a format without a bank.
+ */
+function prepColumns({ t, format }: Context): Column[] {
+  if (format.prepTime === undefined) return [];
+  return timingColumns(t, t('csv.prep'), ({ debate, side }) => debate.prep?.clocks[side] ?? null);
 }
 
 /** Planned, used, left and over, in whole seconds. A clock that never ran has only its plan. */

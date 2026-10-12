@@ -1,7 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { setTopicText } from '../model/edit';
-import { GRAFFITI_PRESET } from '../model/presets';
+import { GRAFFITI_PRESET, KARL_POPPER_PRESET } from '../model/presets';
 import { initialState, type AppState } from '../model/reducer';
 import { newDebate } from '../model/session';
 import { renderSetup } from '../test/setupScreen';
@@ -222,6 +222,93 @@ describe('the format', () => {
     expect(state().config.format.steps.at(-1)?.id).toBe('s2');
   });
 
+  it('switches a prep-time bank on and off, and sets how much each team gets', () => {
+    const { state } = renderSetup({ tab: 'format' });
+    const prep = within(screen.getByRole('group', { name: 'Prep time' }));
+    const on = prep.getByRole('checkbox', { name: 'A prep-time bank for each team' });
+    expect(on).not.toBeChecked();
+    expect(prep.queryByRole('spinbutton')).not.toBeInTheDocument();
+
+    fireEvent.click(on);
+    expect(on).toBeChecked();
+    expect(state().config.format.prepTime).toEqual({ secondsPerTeam: 240 });
+    const seconds = prep.getByRole('spinbutton', { name: 'Seconds per team' });
+    expect(seconds).toHaveValue(240);
+    expect(seconds).toHaveAccessibleDescription('4 min');
+    // Both banks count in the total.
+    expect(total()).toHaveTextContent('18 minutes');
+
+    fireEvent.change(seconds, { target: { value: '0' } });
+    expect(seconds).toHaveAccessibleDescription('0 is not between 1 and 3,600.');
+    expect(state().config.format.prepTime).toEqual({ secondsPerTeam: 240 });
+    fireEvent.change(seconds, { target: { value: '90' } });
+    expect(state().config.format.prepTime).toEqual({ secondsPerTeam: 90 });
+    expect(total()).toHaveTextContent('13 minutes');
+
+    fireEvent.click(on);
+    expect(Object.hasOwn(state().config.format, 'prepTime')).toBe(false);
+    expect(prep.queryByRole('spinbutton')).not.toBeInTheDocument();
+    expect(total()).toHaveTextContent('10 minutes');
+  });
+
+  it('offers the kinds of #8, and asks a cross-examination for the side that asks', () => {
+    const { state } = renderSetup({ tab: 'format' });
+    const kind = within(step(3)).getByRole('combobox', { name: 'Kind' });
+    expect(within(kind).getByRole('option', { name: 'Cross-examination' })).toBeEnabled();
+    expect(within(kind).getByRole('option', { name: 'Audience questions' })).toBeEnabled();
+
+    fireEvent.change(kind, { target: { value: 'cross-examination' } });
+    expect(state().config.format.steps[2]).toEqual({
+      id: 'opening-con',
+      type: 'cross-examination',
+      label: 'Opening',
+      askingSide: 'con',
+      seconds: 60,
+    });
+    expect(within(step(3)).queryByRole('combobox', { name: 'Side' })).not.toBeInTheDocument();
+    const asks = within(step(3)).getByRole('combobox', { name: 'Side that asks' });
+    expect(asks).toHaveDisplayValue('AGAINST');
+    fireEvent.change(asks, { target: { value: 'pro' } });
+    expect(state().config.format.steps[2]).toMatchObject({ askingSide: 'pro' });
+
+    fireEvent.change(kind, { target: { value: 'audience-questions' } });
+    expect(state().config.format.steps[2]).toEqual({
+      id: 'opening-con',
+      type: 'audience-questions',
+      label: 'Opening',
+      seconds: 60,
+    });
+    expect(within(step(3)).queryByRole('combobox', { name: /Side/ })).not.toBeInTheDocument();
+    expect(within(step(3)).getByRole('spinbutton', { name: 'Seconds' })).toHaveValue(60);
+  });
+
+  it('takes the prep time of a preset, or none', () => {
+    const { state } = renderSetup({ tab: 'format' });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Preset' }), {
+      target: { value: 'karl-popper' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Use this preset' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Replace the format' }));
+    expect(state().config.format).toEqual(KARL_POPPER_PRESET.build('en').format);
+    const prep = within(screen.getByRole('group', { name: 'Prep time' }));
+    expect(prep.getByRole('checkbox')).toBeChecked();
+    expect(prep.getByRole('spinbutton', { name: 'Seconds per team' })).toHaveValue(240);
+    expect(total()).toHaveTextContent('52 minutes');
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Preset' }), {
+      target: { value: 'graffiti' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Use this preset' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Replace the format' }));
+    expect(Object.hasOwn(state().config.format, 'prepTime')).toBe(false);
+    expect(prep.getByRole('checkbox')).not.toBeChecked();
+  });
+
+  it('keeps the prep time shut while debates with results lock the format', () => {
+    renderSetup({ tab: 'format', initial: withResults() });
+    expect(screen.getByRole('checkbox', { name: 'A prep-time bank for each team' })).toBeDisabled();
+  });
+
   it('starts over from a preset in the current language, after asking, and keeps the topics', () => {
     const own = setTopicText(english, 't1', 'Eigen stelling');
     const { state } = renderSetup({ tab: 'format', locale: 'nl', initial: initialState(own) });
@@ -244,7 +331,7 @@ describe('the format', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Dit sjabloon gebruiken' }));
     expect(screen.getByRole('group', { name: 'Dit sjabloon gebruiken' })).toHaveTextContent(
-      'Dit vervangt de kanten, de teamgrootte en alle stappen.',
+      'Dit vervangt de kanten, de teamgrootte, de voorbereidingstijd en alle stappen.',
     );
     expect(screen.getByRole('button', { name: 'Annuleren' })).toHaveFocus();
     fireEvent.click(screen.getByRole('button', { name: 'Debatvorm vervangen' }));

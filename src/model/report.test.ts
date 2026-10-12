@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { playedSession } from '../test/playedSession';
-import type { DebateConfig, Step } from './config';
+import { playedPopperSession, playedSession, popperWithQuestions } from '../test/playedSession';
+import { STEP_TYPES, type DebateConfig, type Step } from './config';
 import { setTopicText } from './edit';
 import { GRAFFITI_PRESET } from './presets';
 import { reducer } from './reducer';
@@ -97,12 +97,12 @@ describe('buildReport', () => {
     const state = playedSession();
     const debate = first();
     expect(debate.teams.pro).toEqual([
-      { slot: 0, name: 'Ann', speeches: 1, freeRoundTurns: 1, turns: 2 },
-      { slot: 1, name: 'Bert', speeches: 1, freeRoundTurns: 1, turns: 2 },
+      { slot: 0, name: 'Ann', speeches: 1, crossExaminations: 0, freeRoundTurns: 1, turns: 2 },
+      { slot: 1, name: 'Bert', speeches: 1, crossExaminations: 0, freeRoundTurns: 1, turns: 2 },
     ]);
     expect(debate.teams.con).toEqual([
-      { slot: 0, name: 'Dirk', speeches: 1, freeRoundTurns: 0, turns: 1 },
-      { slot: 1, name: 'Eva', speeches: 0, freeRoundTurns: 1, turns: 1 },
+      { slot: 0, name: 'Dirk', speeches: 1, crossExaminations: 0, freeRoundTurns: 0, turns: 1 },
+      { slot: 1, name: 'Eva', speeches: 0, crossExaminations: 0, freeRoundTurns: 1, turns: 1 },
     ]);
     const [d1] = state.session.debates;
     for (const side of ['pro', 'con'] as const) {
@@ -209,9 +209,86 @@ describe('buildReport', () => {
 describe('stepResult', () => {
   it('has a result of its own kind for every kind of step', () => {
     const [debate] = playedSession().session.debates;
-    for (const step of config.format.steps as readonly Step[]) {
+    const steps: readonly Step[] = [...config.format.steps, ...popperWithQuestions().format.steps];
+    expect(new Set(steps.map((step) => step.type))).toEqual(new Set(STEP_TYPES));
+    for (const step of steps) {
       expect(stepResult(debate, step, 0).type).toBe(step.type);
     }
+  });
+});
+
+describe('buildReport: cross-examination, audience questions and prep time (#8)', () => {
+  const popper = () => {
+    const state = playedPopperSession();
+    return buildReport(state.config, state.session, 1_000_000).debates[0];
+  };
+
+  it('says who asked and who answered in a cross-examination, and its time', () => {
+    const debate = popper();
+    expect(result(debate, 'cross-examination-con-1', 'cross-examination')).toMatchObject({
+      clock: { side: null, planned: 180, timing: { used: 25, rest: 155, overtime: 0 } },
+      askers: [{ slot: 0, name: 'Dirk' }],
+      answerers: [{ slot: 0, name: 'Ann' }],
+    });
+    expect(result(debate, 'cross-examination-pro-1', 'cross-examination')).toMatchObject({
+      clock: { timing: null },
+      askers: [],
+      answerers: [],
+    });
+  });
+
+  it('counts a cross-examination asked or answered in as a turn', () => {
+    const debate = popper();
+    expect(debate.teams.pro[0]).toEqual({
+      slot: 0,
+      name: 'Ann',
+      speeches: 0,
+      crossExaminations: 1,
+      freeRoundTurns: 0,
+      turns: 1,
+    });
+    expect(debate.teams.con[0]).toMatchObject({ name: 'Dirk', crossExaminations: 1, turns: 1 });
+    expect(debate.teams.con[1]).toMatchObject({ name: 'Eva', crossExaminations: 0, turns: 0 });
+  });
+
+  it('gives the time of the audience questions and the answers of each team', () => {
+    expect(result(popper(), 's1', 'audience-questions')).toMatchObject({
+      clock: { planned: 120, timing: { used: 30, rest: 90 } },
+      answers: { pro: 2, con: 1 },
+    });
+  });
+
+  it('gives what each team used of its prep time, what was left, and any overtime', () => {
+    expect(popper().prep).toEqual({
+      secondsPerTeam: 30,
+      clocks: {
+        pro: {
+          side: 'pro',
+          planned: 30,
+          timing: { planned: 30, used: 0, rest: 30, overtime: 0 },
+        },
+        con: {
+          side: 'con',
+          planned: 30,
+          timing: { planned: 30, used: 35, rest: 0, overtime: 5 },
+        },
+      },
+    });
+  });
+
+  it('counts prep time that still runs up to now', () => {
+    const state = playedPopperSession();
+    const running = reducer(reducer(state, { type: 'open-debate', debateId: 'd1', now: 0 }), {
+      type: 'toggle-prep',
+      side: 'pro',
+      now: 0,
+    });
+    const [debate] = buildReport(running.config, running.session, 12_000).debates;
+    expect(debate.prep?.clocks.pro.timing).toMatchObject({ used: 12, rest: 18 });
+  });
+
+  it('has no prep time for a format without a bank', () => {
+    expect(first().prep).toBeNull();
   });
 });
 

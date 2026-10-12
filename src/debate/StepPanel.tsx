@@ -1,7 +1,10 @@
+import type { ReactNode } from 'react';
 import { useI18n } from '../i18n';
 import type { ConsultationStep, Step } from '../model/config';
 import { clocksOf } from '../model/session';
+import { AudienceQuestionsPanel } from './AudienceQuestionsPanel';
 import { Countdown } from './Countdown';
+import { CrossExaminationPanel } from './CrossExaminationPanel';
 import styles from './debate.module.css';
 import { FreeRoundPanel } from './FreeRoundPanel';
 import type { PanelProps } from './panels';
@@ -13,7 +16,7 @@ import { VotePanel } from './VotePanel';
  * of step gets its panel here; the compiler asks for it, since the switch
  * covers every type.
  */
-export function StepPanel(props: PanelProps<Step>) {
+export function StepPanel(props: PanelProps<Step>): ReactNode {
   const { step } = props;
   switch (step.type) {
     case 'speech':
@@ -22,6 +25,10 @@ export function StepPanel(props: PanelProps<Step>) {
       return <ConsultationPanel {...props} step={step} />;
     case 'free-round':
       return <FreeRoundPanel {...props} step={step} />;
+    case 'cross-examination':
+      return <CrossExaminationPanel {...props} step={step} />;
+    case 'audience-questions':
+      return <AudienceQuestionsPanel {...props} step={step} />;
     case 'vote-before':
     case 'vote-after':
       return <VotePanel {...props} step={step} />;

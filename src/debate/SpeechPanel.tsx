@@ -59,7 +59,7 @@ export function SpeechPanel({ step, debate, now, dispatch }: PanelProps<SpeechSt
                     type="button"
                     className={styles.inkButton}
                     aria-label={t('debate.removeSpeaker', { name: nameOf(slot) })}
-                    onClick={() => dispatch({ type: 'remove-speaker', slot })}
+                    onClick={() => dispatch({ type: 'remove-speaker', side: step.side, slot })}
                   >
                     ×
                   </button>

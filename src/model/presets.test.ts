@@ -1,8 +1,16 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { stepSeconds, stepSide, type DebateConfig } from './config';
+import { formatTotalSeconds, stepSeconds, stepSide, type DebateConfig } from './config';
 import { LOCALES } from './locale';
-import { DEFAULT_PRESET, GRAFFITI_PRESET, PRESETS, defaultConfig, findPreset } from './presets';
+import {
+  DEFAULT_PRESET,
+  GRAFFITI_PRESET,
+  KARL_POPPER_PRESET,
+  PRESETS,
+  PUBLIC_DEBATE_PRESET,
+  defaultConfig,
+  findPreset,
+} from './presets';
 import { parseConfig } from './validate';
 
 // The original app, verbatim from debat-logic.ts in yvanvds/cursus-esthetica
@@ -117,6 +125,94 @@ describe('graffiti preset', () => {
     expect(defaultConfig('nl')).toEqual(GRAFFITI_PRESET.build('nl'));
     expect(findPreset('graffiti')).toBe(GRAFFITI_PRESET);
     expect(findPreset('nope')).toBeUndefined();
+  });
+});
+
+describe('Karl Popper preset', () => {
+  // "The Karl Popper Debate Format", Debate Central, University of Vermont
+  // (presets.ts): who speaks or asks, and for how many minutes.
+  const SOURCE = [
+    ['speech', 'pro', 6], // affirmative speech, student 1
+    ['cross-examination', 'con', 3], // negative cross-examination, student 3
+    ['speech', 'con', 6], // negative speech, student 1
+    ['cross-examination', 'pro', 3], // affirmative cross-examination, student 3
+    ['speech', 'pro', 5], // affirmative speech, student 2
+    ['cross-examination', 'con', 3], // negative cross-examination, student 1
+    ['speech', 'con', 5], // negative speech, student 2
+    ['cross-examination', 'pro', 3], // affirmative cross-examination, student 1
+    ['speech', 'pro', 5], // affirmative speech and closing remarks, student 3
+    ['speech', 'con', 5], // negative speech and closing remarks, student 3
+  ] as const;
+
+  it('has the speeches and cross-examinations of the source, in order and on time', () => {
+    const steps = KARL_POPPER_PRESET.build('en').format.steps;
+    expect(steps.map((step) => [step.type, stepSide(step), (stepSeconds(step) ?? 0) / 60])).toEqual(
+      SOURCE,
+    );
+  });
+
+  it('gives each team a bank of 4 minutes of prep time, three students a side, and no vote', () => {
+    const { format } = KARL_POPPER_PRESET.build('nl');
+    expect(format.prepTime).toEqual({ secondsPerTeam: 240 });
+    expect(format.teamSize).toEqual({ min: 3, max: 3 });
+    expect(format.steps.some((step) => step.type.startsWith('vote'))).toBe(false);
+    // 44 minutes of speaking and questions, and 4 minutes for each team to prepare.
+    expect(formatTotalSeconds(format)).toBe((44 + 8) * 60);
+  });
+
+  it('calls its sides affirmative and negative, in either language', () => {
+    expect(KARL_POPPER_PRESET.build('en').format.sides).toEqual({
+      pro: 'AFFIRMATIVE',
+      con: 'NEGATIVE',
+    });
+    expect(KARL_POPPER_PRESET.build('nl').format.sides).toEqual({
+      pro: 'BEVESTIGEND',
+      con: 'ONTKENNEND',
+    });
+    expect(KARL_POPPER_PRESET.build('nl').format.steps[1].label).toBe('Kruisverhoor');
+  });
+
+  it('can be found by its id', () => {
+    expect(findPreset('karl-popper')).toBe(KARL_POPPER_PRESET);
+  });
+});
+
+describe('public debate preset', () => {
+  it('opens and closes with the audience vote, with questions from the audience in between', () => {
+    const { format } = PUBLIC_DEBATE_PRESET.build('en');
+    expect(format.steps.map((step) => [step.type, stepSide(step), stepSeconds(step)])).toEqual([
+      ['vote-before', null, null],
+      ['speech', 'pro', 7 * 60],
+      ['speech', 'con', 7 * 60],
+      ['audience-questions', null, 10 * 60],
+      ['speech', 'pro', 2 * 60],
+      ['speech', 'con', 2 * 60],
+      ['vote-after', null, null],
+    ]);
+    expect(formatTotalSeconds(format)).toBe(28 * 60);
+  });
+
+  it('has two debaters a side, no prep-time bank, and Dutch labels in Dutch', () => {
+    const { format } = PUBLIC_DEBATE_PRESET.build('nl');
+    expect(format.teamSize).toEqual({ min: 2, max: 2 });
+    expect(Object.hasOwn(format, 'prepTime')).toBe(false);
+    expect(format.sides).toEqual({ pro: 'VOOR', con: 'TEGEN' });
+    expect(format.steps[3].label).toBe('Vragen uit het publiek');
+    expect(PUBLIC_DEBATE_PRESET.name).toEqual({ en: 'Public debate', nl: 'Publiek debat' });
+  });
+
+  it('can be found by its id', () => {
+    expect(findPreset('public-debate')).toBe(PUBLIC_DEBATE_PRESET);
+  });
+});
+
+describe('the presets', () => {
+  it('are the graffiti debate, Karl Popper and the public debate, each with its own id', () => {
+    expect(PRESETS.map((preset) => preset.id)).toEqual([
+      'graffiti',
+      'karl-popper',
+      'public-debate',
+    ]);
   });
 });
 

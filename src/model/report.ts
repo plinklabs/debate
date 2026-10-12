@@ -1,15 +1,20 @@
 // The results of a session as a report reads them (#7): per debate the topic
 // and the teams, planned against used time per clock of every timed step, who
-// spoke and how often, the balance of each free round and the audience vote
-// with its shift. Plain data, with the names in it, so it stays on the private
-// side of the model; the HTML report and the CSV (src/report/) only lay it out.
+// spoke and how often, who asked and answered in each cross-examination, the
+// balance of each free round, the answers to the audience, the prep time each
+// team used and the audience vote with its shift. Plain data, with the names
+// in it, so it stays on the private side of the model; the HTML report and the
+// CSV (src/report/) only lay it out.
 //
 // A report covers the debates that have results (`hasResults`), in the order
 // of the session, and follows the format as it is now: a step that is no
 // longer in the format is not in the report.
 
 import {
+  otherSide,
+  type AudienceQuestionsStep,
   type ConsultationStep,
+  type CrossExaminationStep,
   type DebateConfig,
   type Format,
   type FreeRoundStep,
@@ -24,6 +29,7 @@ import {
   freeRoundTurns,
   hasResults,
   membersOf,
+  prepClocks,
   recordFor,
   type Debate,
   type Member,
@@ -49,6 +55,24 @@ export interface SpeechResult {
   readonly clock: ClockResult;
   /** Who spoke in this turn, in order of first tap. */
   readonly speakers: readonly Member[];
+}
+
+export interface CrossExaminationResult {
+  readonly type: 'cross-examination';
+  readonly step: CrossExaminationStep;
+  readonly clock: ClockResult;
+  /** Who asked, on the asking side, in order of first tap. */
+  readonly askers: readonly Member[];
+  /** Who answered, on the other side, in order of first tap. */
+  readonly answerers: readonly Member[];
+}
+
+export interface AudienceQuestionsResult {
+  readonly type: 'audience-questions';
+  readonly step: AudienceQuestionsStep;
+  readonly clock: ClockResult;
+  /** Answers each team gave, as counted; 0 and 0 when nobody counted. */
+  readonly answers: Readonly<Record<Side, number>>;
 }
 
 export interface ConsultationResult {
@@ -90,6 +114,8 @@ export type StepResult =
   | SpeechResult
   | ConsultationResult
   | FreeRoundResult
+  | CrossExaminationResult
+  | AudienceQuestionsResult
   | VoteResult<'vote-before'>
   | VoteResult<'vote-after'>;
 
@@ -97,6 +123,8 @@ export type StepResult =
 export interface MemberResult extends Member {
   /** Speeches they spoke in. */
   readonly speeches: number;
+  /** Cross-examinations they asked or answered in. */
+  readonly crossExaminations: number;
   /** Their turns in the free rounds. */
   readonly freeRoundTurns: number;
   /** Both together (`turnsOf`). */
@@ -111,6 +139,18 @@ export interface VoteSummary {
   readonly shift: Shift | null;
 }
 
+/** The prep time of a debate: each team's bank, and what it used of it. */
+export interface PrepResult {
+  /** Seconds in each team's bank. */
+  readonly secondsPerTeam: number;
+  /**
+   * Each team's clock. Its `timing` is always there, an unused bank as 0 used:
+   * prep time is not a step that was or was not held. `rest` is what is left,
+   * `overtime` what the team used beyond its bank.
+   */
+  readonly clocks: Readonly<Record<Side, ClockResult & { readonly timing: Timing }>>;
+}
+
 export interface DebateResult {
   readonly id: string;
   /** Position in the session's list of debates, from 1: "Debate 2". */
@@ -123,6 +163,8 @@ export interface DebateResult {
   readonly steps: readonly StepResult[];
   /** `null` when the format has no vote. */
   readonly vote: VoteSummary | null;
+  /** `null` when the format has no prep-time bank. */
+  readonly prep: PrepResult | null;
 }
 
 export interface Report {
@@ -174,6 +216,21 @@ function debateResult(
                 ? null
                 : voteShift(before.votes, after.votes),
           },
+    prep: prepResult(format, debate, now),
+  };
+}
+
+function prepResult(format: Format, debate: Debate, now: number): PrepResult | null {
+  if (format.prepTime === undefined) return null;
+  const clocks = prepClocks(format, debate);
+  const clock = (side: Side) => {
+    const found = clocks.find((candidate) => candidate.side === side) ?? clocks[0];
+    const elapsed = elapsedMs(found.timer, now);
+    return { side, planned: found.seconds, timing: timingOf(found.seconds, elapsed) };
+  };
+  return {
+    secondsPerTeam: format.prepTime.secondsPerTeam,
+    clocks: { pro: clock('pro'), con: clock('con') },
   };
 }
 
@@ -189,6 +246,29 @@ export function stepResult(debate: Debate, step: Step, now: number): StepResult 
     }
     case 'consultation':
       return { type: step.type, step, clock: onlyClock(debate, step, now) };
+    case 'cross-examination': {
+      const record = recordFor(debate, step);
+      const named = (side: Side, slots: readonly number[]) => {
+        const members = membersOf(debate.teams, side);
+        return slots
+          .map((slot) => members.find((member) => member.slot === slot))
+          .filter((member) => member !== undefined);
+      };
+      return {
+        type: step.type,
+        step,
+        clock: onlyClock(debate, step, now),
+        askers: named(step.askingSide, record.askers),
+        answerers: named(otherSide(step.askingSide), record.answerers),
+      };
+    }
+    case 'audience-questions':
+      return {
+        type: step.type,
+        step,
+        clock: onlyClock(debate, step, now),
+        answers: recordFor(debate, step).answers,
+      };
     case 'free-round': {
       const round = recordFor(debate, step);
       const clock = (side: Side) =>
@@ -230,23 +310,39 @@ function clockResult(clock: StepClock, now: number): ClockResult {
   };
 }
 
-function onlyClock(debate: Debate, step: SpeechStep | ConsultationStep, now: number): ClockResult {
+function onlyClock(
+  debate: Debate,
+  step: SpeechStep | ConsultationStep | CrossExaminationStep | AudienceQuestionsStep,
+  now: number,
+): ClockResult {
   const [clock] = clocksOf(debate, step);
   return clockResult(clock, now);
 }
 
 function memberResults(steps: readonly StepResult[], debate: Debate, side: Side): MemberResult[] {
+  const isMember = (list: readonly Member[], member: Member) =>
+    list.some((other) => other.slot === member.slot);
   return membersOf(debate.teams, side).map((member) => {
     let speeches = 0;
+    let crossExaminations = 0;
     let freeRound = 0;
     for (const result of steps) {
       if (result.type === 'speech' && result.step.side === side) {
-        if (result.speakers.some((speaker) => speaker.slot === member.slot)) speeches += 1;
+        if (isMember(result.speakers, member)) speeches += 1;
+      } else if (result.type === 'cross-examination') {
+        const asking = result.step.askingSide === side;
+        if (isMember(asking ? result.askers : result.answerers, member)) crossExaminations += 1;
       } else if (result.type === 'free-round') {
         freeRound += result.speakers[side].find((s) => s.slot === member.slot)?.turns ?? 0;
       }
     }
-    return { ...member, speeches, freeRoundTurns: freeRound, turns: speeches + freeRound };
+    return {
+      ...member,
+      speeches,
+      crossExaminations,
+      freeRoundTurns: freeRound,
+      turns: speeches + crossExaminations + freeRound,
+    };
   });
 }
 

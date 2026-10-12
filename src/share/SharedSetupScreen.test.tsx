@@ -2,7 +2,7 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { DebateConfig } from '../model/config';
 import { setSideLabel, setTopicText } from '../model/edit';
-import { GRAFFITI_PRESET } from '../model/presets';
+import { GRAFFITI_PRESET, KARL_POPPER_PRESET } from '../model/presets';
 import { initialState, type AppState } from '../model/reducer';
 import { newDebate } from '../model/session';
 import type { ConfigIssue, ConfigResult } from '../model/validate';
@@ -194,6 +194,56 @@ describe('a shared setup', () => {
     expect(screen.getByText('Vrije ronde')).toBeInTheDocument();
     expect(screen.getByText('1 min 30 sec per team')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Deze opzet gebruiken' })).toBeInTheDocument();
+  });
+});
+
+describe('a shared setup with the steps and prep time of #8', () => {
+  it('shows the prep time of each team, and which side asks in a cross-examination', () => {
+    const popper = KARL_POPPER_PRESET.build('en');
+    const steps = [
+      ...popper.format.steps.slice(0, 2),
+      { id: 'questions', type: 'audience-questions', label: '', seconds: 600 } as const,
+    ];
+    show(ok({ ...popper, format: { ...popper.format, steps } }));
+    const format = screen.getByRole('region', { name: 'Format' });
+    const spec = (term: string) =>
+      within(format).getByText(term, { selector: 'dt' }).nextElementSibling;
+    expect(spec('Prep time')).toHaveTextContent('4 min per team');
+    // 6 + 3 + 10 minutes of steps, and 4 minutes for each team.
+    expect(spec('Total time')).toHaveTextContent('27 minutes');
+    const list = within(format)
+      .getAllByRole('list')
+      .find((candidate) => candidate.tagName === 'OL');
+    expect(
+      within(list!)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual([
+      'ConstructiveSpeech · AFFIRMATIVE · 6 min',
+      'Cross-examinationNEGATIVE asks · 3 min',
+      'Audience questions10 min',
+    ]);
+  });
+
+  it('shows no prep time for a format without a bank', () => {
+    show(ok(english));
+    const format = screen.getByRole('region', { name: 'Format' });
+    expect(within(format).queryByText('Prep time')).not.toBeInTheDocument();
+  });
+
+  it('says where a broken prep-time bank is', () => {
+    show(
+      broken({
+        code: 'out-of-range',
+        path: ['format', 'prepTime', 'secondsPerTeam'],
+        value: 0,
+        min: 1,
+        max: 3600,
+      }),
+    );
+    expect(within(screen.getByRole('alert')).getByRole('listitem')).toHaveTextContent(
+      'Prep time: 0 is not between 1 and 3,600.',
+    );
   });
 });
 

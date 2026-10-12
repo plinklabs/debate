@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
 import { Button } from '../components/ui/Button';
+import { Checkbox } from '../components/ui/Checkbox';
 import { Field, Select } from '../components/ui/Field';
 import { InlineConfirm } from '../components/ui/InlineConfirm';
 import { useFocusAfterRender } from '../components/ui/useFocusAfterRender';
@@ -11,14 +12,17 @@ import {
   formatTotalSeconds,
   isStepType,
   stepSeconds,
+  stepSide,
   type Step,
   type TeamSize,
 } from '../model/config';
 import {
+  NEW_PREP_SECONDS,
   addStep,
   moveStep,
   removeStep,
   setFormat,
+  setPrepTime,
   setSideLabel,
   setStepLabel,
   setStepSeconds,
@@ -41,9 +45,9 @@ interface Props {
 }
 
 /**
- * The format: a preset to start from, the side labels, the team size and the
- * steps. When a debate already has results, the editor stays shut until the
- * teacher confirms they want to change it anyway.
+ * The format: a preset to start from, the side labels, the team size, the
+ * prep-time bank and the steps. When a debate already has results, the editor
+ * stays shut until the teacher confirms they want to change it anyway.
  */
 export function FormatPanel({ editor, session }: Props) {
   const { t, formatDuration, formatNumber } = useI18n();
@@ -126,6 +130,8 @@ export function FormatPanel({ editor, session }: Props) {
           </div>
         </fieldset>
 
+        <PrepTimeGroup editor={editor} idPrefix={prefix} />
+
         <div className={styles.group}>
           <h3 className={styles.groupTitle}>{t('format.steps')}</h3>
           <ol className={styles.list}>
@@ -183,6 +189,53 @@ function PresetPicker({ editor, idPrefix }: PresetPickerProps) {
   );
 }
 
+interface PrepTimeGroupProps {
+  readonly editor: ConfigEditor;
+  readonly idPrefix: string;
+}
+
+/**
+ * The prep-time bank (#8): on or off, and how much each team gets. Switched
+ * on, it starts at `NEW_PREP_SECONDS`.
+ */
+function PrepTimeGroup({ editor, idPrefix }: PrepTimeGroupProps) {
+  const { t, formatDuration } = useI18n();
+  const { config } = editor;
+  const { prepTime } = config.format;
+  const id = `${idPrefix}-prep`;
+  return (
+    <fieldset className={styles.group} aria-describedby={`${id}-about`}>
+      <legend className={styles.groupTitle}>{t('format.prepTime')}</legend>
+      <p id={`${id}-about`} className={styles.groupIntro}>
+        {t('format.prepTime.hint')}
+      </p>
+      <div className={styles.prepRow}>
+        <Checkbox
+          id={`${id}-on`}
+          label={t('format.prepTime.on')}
+          checked={prepTime !== undefined}
+          onChange={(event) =>
+            editor.apply(setPrepTime(config, event.target.checked ? NEW_PREP_SECONDS : null))
+          }
+        />
+        {prepTime !== undefined && (
+          <DraftField
+            id={`${id}-seconds`}
+            kind="number"
+            label={t('format.step.secondsPerTeam')}
+            value={String(prepTime.secondsPerTeam)}
+            min={LIMITS.prepSeconds.min}
+            max={LIMITS.prepSeconds.max}
+            hint={formatDuration(prepTime.secondsPerTeam)}
+            className={styles.prepSeconds}
+            apply={(raw) => editor.apply(setPrepTime(config, toInteger(raw)))}
+          />
+        )}
+      </div>
+    </fieldset>
+  );
+}
+
 interface StepItemProps {
   readonly step: Step;
   readonly index: number;
@@ -198,6 +251,8 @@ function StepItem({ step, index, editor, idPrefix, onFocusLater }: StepItemProps
   const number = index + 1;
   const base = `${idPrefix}-${step.id}`;
   const seconds = stepSeconds(step);
+  // A speech has a side, and a cross-examination the side that asks.
+  const side = step.type === 'speech' || step.type === 'cross-examination' ? stepSide(step) : null;
   // A step without a label of its own goes by the name of its kind.
   const typeName = t(`stepType.${step.type}`);
 
@@ -241,19 +296,27 @@ function StepItem({ step, index, editor, idPrefix, onFocusLater }: StepItemProps
             apply={(raw) => editor.apply(setStepLabel(config, step.id, raw))}
           />
 
-          {step.type === 'speech' && (
-            <Field id={`${base}-side`} label={t('format.step.side')} className={styles.cellSide}>
+          {side !== null && (
+            <Field
+              id={`${base}-side`}
+              label={
+                step.type === 'cross-examination'
+                  ? t('format.step.askingSide')
+                  : t('format.step.side')
+              }
+              className={styles.cellSide}
+            >
               <Select
                 id={`${base}-side`}
-                value={step.side}
+                value={side}
                 onChange={(event) => {
-                  const side = SIDES.find((candidate) => candidate === event.target.value);
-                  if (side !== undefined) editor.apply(setStepSide(config, step.id, side));
+                  const picked = SIDES.find((candidate) => candidate === event.target.value);
+                  if (picked !== undefined) editor.apply(setStepSide(config, step.id, picked));
                 }}
               >
-                {SIDES.map((side) => (
-                  <option key={side} value={side}>
-                    {sides[side]}
+                {SIDES.map((option) => (
+                  <option key={option} value={option}>
+                    {sides[option]}
                   </option>
                 ))}
               </Select>

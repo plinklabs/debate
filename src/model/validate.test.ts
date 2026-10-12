@@ -29,6 +29,8 @@ function rawConfig(): RawConfig {
         { id: 'opening', type: 'speech', side: 'pro', seconds: 60, label: 'Opening' },
         { id: 'prepare', type: 'consultation', seconds: 60, label: 'Prepare' },
         { id: 'free', type: 'free-round', seconds: 90, label: 'Free round' },
+        { id: 'cross', type: 'cross-examination', askingSide: 'con', seconds: 180, label: 'CX' },
+        { id: 'questions', type: 'audience-questions', seconds: 300, label: 'Questions' },
         { id: 'vote-after', type: 'vote-after', label: 'Vote' },
       ],
     },
@@ -61,6 +63,8 @@ describe('parseConfig: valid input', () => {
       'speech',
       'consultation',
       'free-round',
+      'cross-examination',
+      'audience-questions',
       'vote-after',
     ]);
   });
@@ -78,6 +82,8 @@ describe('parseConfig: valid input', () => {
     raw.format.steps[0].seconds = 30; // a vote has no timer
     raw.format.steps[1].speakers = ['Ann'];
     raw.format.steps[2].side = 'pro'; // a consultation belongs to both teams
+    raw.format.steps[4].side = 'pro'; // a cross-examination has a side that asks
+    raw.format.steps[5].answers = { pro: 3, con: 1 }; // counted in a session, not here
     raw.topics[0].names = ['Ann'];
 
     const config = configOf(raw);
@@ -92,6 +98,8 @@ describe('parseConfig: valid input', () => {
           { id: 'opening', type: 'speech', side: 'pro', seconds: 60, label: 'Opening' },
           { id: 'prepare', type: 'consultation', seconds: 60, label: 'Prepare' },
           { id: 'free', type: 'free-round', seconds: 90, label: 'Free round' },
+          { id: 'cross', type: 'cross-examination', askingSide: 'con', seconds: 180, label: 'CX' },
+          { id: 'questions', type: 'audience-questions', seconds: 300, label: 'Questions' },
           { id: 'vote-after', type: 'vote-after', label: 'Vote' },
         ],
       },
@@ -181,12 +189,12 @@ describe('parseConfig: malformed input', () => {
 
   it('rejects an unknown step type', () => {
     const raw = rawConfig();
-    raw.format.steps[2].type = 'cross-examination';
+    raw.format.steps[2].type = 'dance';
     expect(issuesOf(raw)).toEqual([
       {
         code: 'unknown-step-type',
         path: ['format', 'steps', 2, 'type'],
-        stepType: 'cross-examination',
+        stepType: 'dance',
       },
     ]);
   });
@@ -292,7 +300,7 @@ describe('parseConfig: malformed input', () => {
     expect(issuesOf(twice)).toEqual([
       {
         code: 'duplicate-step-type',
-        path: ['format', 'steps', 5, 'type'],
+        path: ['format', 'steps', 7, 'type'],
         stepType: 'vote-after',
       },
     ]);
@@ -314,5 +322,101 @@ describe('parseConfig: malformed input', () => {
       { code: 'wrong-type', path: ['format', 'steps', 2], expected: 'object' },
       { code: 'wrong-type', path: ['topics'], expected: 'array' },
     ]);
+  });
+});
+
+describe('parseConfig: cross-examination, audience questions and prep time (#8)', () => {
+  it('reads a config without a prep-time bank, as from before #8, unchanged', () => {
+    const raw = rawConfig();
+    expect(configOf(raw)).toStrictEqual(raw);
+    expect(Object.hasOwn(configOf(raw).format, 'prepTime')).toBe(false);
+  });
+
+  it('reads a prep-time bank of null as none', () => {
+    const raw = rawConfig();
+    raw.format.prepTime = null;
+    expect(Object.hasOwn(configOf(raw).format, 'prepTime')).toBe(false);
+  });
+
+  it('keeps a prep-time bank, and only its known field', () => {
+    const raw = rawConfig();
+    raw.format.prepTime = { secondsPerTeam: 240, used: { pro: 30 } };
+    expect(configOf(raw).format.prepTime).toStrictEqual({ secondsPerTeam: 240 });
+  });
+
+  const at = ['format', 'prepTime', 'secondsPerTeam'];
+
+  it.each([
+    [{}, { code: 'missing-field', path: at }],
+    [{ secondsPerTeam: 0 }, { code: 'out-of-range', path: at, value: 0, min: 1, max: 3600 }],
+    [{ secondsPerTeam: 3601 }, { code: 'out-of-range', path: at, value: 3601, min: 1, max: 3600 }],
+    [{ secondsPerTeam: 1.5 }, { code: 'wrong-type', path: at, expected: 'integer' }],
+    [{ secondsPerTeam: '240' }, { code: 'wrong-type', path: at, expected: 'integer' }],
+    [240, { code: 'wrong-type', path: ['format', 'prepTime'], expected: 'object' }],
+    ['4 minutes', { code: 'wrong-type', path: ['format', 'prepTime'], expected: 'object' }],
+    [[240], { code: 'wrong-type', path: ['format', 'prepTime'], expected: 'object' }],
+  ])('rejects the prep-time bank %j', (prepTime, issue) => {
+    const raw = rawConfig();
+    raw.format.prepTime = prepTime;
+    expect(issuesOf(raw)).toEqual([issue]);
+  });
+
+  it('reports a broken prep-time bank along with the other problems', () => {
+    const raw = rawConfig();
+    raw.format.prepTime = { secondsPerTeam: -1 };
+    raw.format.steps[1].seconds = 0;
+    expect(issuesOf(raw).map((issue) => issue.path)).toEqual([
+      ['format', 'prepTime', 'secondsPerTeam'],
+      ['format', 'steps', 1, 'seconds'],
+    ]);
+  });
+
+  it('requires the side that asks in a cross-examination, and its seconds', () => {
+    const raw = rawConfig();
+    delete raw.format.steps[4].askingSide;
+    delete raw.format.steps[4].seconds;
+    expect(issuesOf(raw)).toEqual([
+      { code: 'missing-field', path: ['format', 'steps', 4, 'askingSide'] },
+      { code: 'missing-field', path: ['format', 'steps', 4, 'seconds'] },
+    ]);
+  });
+
+  it('rejects an unknown side that asks, or one that is not text', () => {
+    const raw = rawConfig();
+    raw.format.steps[4].askingSide = 'both';
+    expect(issuesOf(raw)).toEqual([
+      { code: 'unknown-side', path: ['format', 'steps', 4, 'askingSide'], side: 'both' },
+    ]);
+    raw.format.steps[4].askingSide = 1;
+    expect(issuesOf(raw)).toEqual([
+      { code: 'wrong-type', path: ['format', 'steps', 4, 'askingSide'], expected: 'string' },
+    ]);
+  });
+
+  it('requires the seconds of audience questions, within the limits of any step', () => {
+    const raw = rawConfig();
+    delete raw.format.steps[5].seconds;
+    expect(issuesOf(raw)).toEqual([
+      { code: 'missing-field', path: ['format', 'steps', 5, 'seconds'] },
+    ]);
+    raw.format.steps[5].seconds = 3601;
+    expect(issuesOf(raw)).toEqual([
+      {
+        code: 'out-of-range',
+        path: ['format', 'steps', 5, 'seconds'],
+        value: 3601,
+        min: 1,
+        max: 3600,
+      },
+    ]);
+  });
+
+  it('allows more than one cross-examination and more than one round of audience questions', () => {
+    const raw = rawConfig();
+    raw.format.steps.push(
+      { id: 'cross-2', type: 'cross-examination', askingSide: 'pro', seconds: 180, label: 'CX' },
+      { id: 'questions-2', type: 'audience-questions', seconds: 60, label: '' },
+    );
+    expect(issuesOf(raw)).toEqual([]);
   });
 });

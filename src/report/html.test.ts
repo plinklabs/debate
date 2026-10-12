@@ -3,7 +3,7 @@ import type { DebateConfig } from '../model/config';
 import { GRAFFITI_PRESET } from '../model/presets';
 import { freeze, type AppState } from '../model/reducer';
 import { readReportText } from '../model/reportFile';
-import { playedSession } from '../test/playedSession';
+import { playedPopperSession, playedSession } from '../test/playedSession';
 import { reportHtml } from './html';
 import { escapeHtml, markup, trusted } from './markup';
 
@@ -259,5 +259,79 @@ describe('the report', () => {
     );
     // And the data reads back with the same names.
     expect(readReportText(html)).toEqual({ ok: true, state: freeze(state, 0) });
+  });
+});
+
+describe('the report of a Karl Popper debate (#8)', () => {
+  const debate = () => section(parse(make(playedPopperSession())), 1);
+
+  it('counts the cross-examinations each student took part in', () => {
+    const tables = debate().querySelectorAll('.teams table');
+    expect(rows(tables[0])).toEqual([
+      ['Student', 'Speeches', 'Cross-examinations', 'Turns'],
+      ['Ann', '0', '1', '1'],
+      ['Bert', '0', '0', '0'],
+      ['Cas', '0', '0', '0'],
+    ]);
+  });
+
+  it('says which side asked which, and who asked and who answered', () => {
+    const times = rows(debate().querySelector('table.times'));
+    expect(times[2]).toEqual([
+      '02 Cross-examination NEGATIVE asks AFFIRMATIVE · Dirk → Ann',
+      '3:00',
+      '0:25',
+      'stopped 2:35 early',
+    ]);
+    expect(times[4]).toEqual([
+      '04 Cross-examination AFFIRMATIVE asks NEGATIVE',
+      '3:00',
+      '—',
+      'not used',
+    ]);
+  });
+
+  it('gives the time of the audience questions, and the answers of each team', () => {
+    const section = debate();
+    expect(rows(section.querySelector('table.times')).at(-1)).toEqual([
+      '11 Audience questions The audience and both teams',
+      '2:00',
+      '0:30',
+      'stopped 1:30 early',
+    ]);
+    expect(text(section.querySelector('table.answers')?.previousElementSibling ?? null)).toBe(
+      'Audience questions: answers per side',
+    );
+    expect(rows(section.querySelector('table.answers'))).toEqual([
+      ['Side', 'Answers'],
+      ['AFFIRMATIVE', '2'],
+      ['NEGATIVE', '1'],
+    ]);
+  });
+
+  it('gives each team its prep time: used, left, and the overtime past its bank', () => {
+    const section = debate();
+    expect(text(section.querySelector('.bank'))).toBe('Each team had 0:30.');
+    expect(rows(section.querySelector('table.prep'))).toEqual([
+      ['Side', 'Used', 'Left'],
+      ['AFFIRMATIVE', '0:00', '0:30'],
+      ['NEGATIVE', '0:35', '0:00 +0:05 over time'],
+    ]);
+  });
+
+  it('is written in Dutch', () => {
+    const section = parse(make(playedPopperSession(), 'nl')).querySelector('section.debate');
+    expect(rows(section?.querySelector('table.prep'))).toEqual([
+      ['Kant', 'Gebruikt', 'Over'],
+      ['AFFIRMATIVE', '0:00', '0:30'],
+      ['NEGATIVE', '0:35', '0:00 +0:05 overtijd'],
+    ]);
+    expect(rows(section?.querySelector('table.times'))[2][0]).toBe(
+      '02 Cross-examination NEGATIVE ondervraagt AFFIRMATIVE · Dirk → Ann',
+    );
+  });
+
+  it('has no prep time for a format without a bank', () => {
+    expect(section(parse(make()), 1).querySelector('table.prep')).toBeNull();
   });
 });

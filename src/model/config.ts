@@ -19,6 +19,11 @@ export type Side = 'pro' | 'con';
 
 export const SIDES: readonly Side[] = ['pro', 'con'];
 
+/** The side across from this one. */
+export function otherSide(side: Side): Side {
+  return side === 'pro' ? 'con' : 'pro';
+}
+
 interface StepBase {
   /** Stable key for this step's results in a session; survives reordering. */
   readonly id: string;
@@ -45,6 +50,22 @@ export interface FreeRoundStep extends StepBase {
   readonly seconds: number;
 }
 
+/**
+ * One side asks questions and the other may only answer (#8). One timer, and
+ * it belongs to the asking side.
+ */
+export interface CrossExaminationStep extends StepBase {
+  readonly type: 'cross-examination';
+  readonly askingSide: Side;
+  readonly seconds: number;
+}
+
+/** A timed open round in which the audience puts questions to both teams (#8); one timer. */
+export interface AudienceQuestionsStep extends StepBase {
+  readonly type: 'audience-questions';
+  readonly seconds: number;
+}
+
 /** The audience votes for or against the topic before the debate. No timer. */
 export interface VoteBeforeStep extends StepBase {
   readonly type: 'vote-before';
@@ -60,11 +81,19 @@ export interface VoteAfterStep extends StepBase {
  * member here with its own fields; the switches over `type` in the model then
  * fail to compile until they handle it.
  */
-export type Step = SpeechStep | ConsultationStep | FreeRoundStep | VoteBeforeStep | VoteAfterStep;
+export type Step =
+  | SpeechStep
+  | ConsultationStep
+  | FreeRoundStep
+  | CrossExaminationStep
+  | AudienceQuestionsStep
+  | VoteBeforeStep
+  | VoteAfterStep;
 
 export type StepType = Step['type'];
 
-export type TimedStep = SpeechStep | ConsultationStep | FreeRoundStep;
+export type TimedStep =
+  SpeechStep | ConsultationStep | FreeRoundStep | CrossExaminationStep | AudienceQuestionsStep;
 
 export type VoteStep = VoteBeforeStep | VoteAfterStep;
 
@@ -73,6 +102,8 @@ const STEP_TYPE_SET: Readonly<Record<StepType, true>> = {
   speech: true,
   consultation: true,
   'free-round': true,
+  'cross-examination': true,
+  'audience-questions': true,
   'vote-before': true,
   'vote-after': true,
 };
@@ -88,10 +119,25 @@ export interface TeamSize {
   readonly max: number;
 }
 
+/**
+ * A bank of prep time (#8): each team has `secondsPerTeam` in all, and calls
+ * for some of it whenever it wants, between steps or during one. What the
+ * teams use is recorded per debate (session.ts).
+ */
+export interface PrepTime {
+  readonly secondsPerTeam: number;
+}
+
 export interface Format {
   /** What each side is called on screen (VOOR/TEGEN, Pro/Contra, …). */
   readonly sides: Readonly<Record<Side, string>>;
   readonly teamSize: TeamSize;
+  /**
+   * The prep-time bank, or no field at all for a format without one. Optional
+   * rather than `null`, so a format without a bank, such as every format from
+   * before #8, reads and shares exactly as it did.
+   */
+  readonly prepTime?: PrepTime;
   readonly steps: readonly Step[];
 }
 
@@ -111,6 +157,8 @@ export interface DebateConfig {
 export const LIMITS = {
   /** Seconds of a timed step (per clock for a free round). */
   stepSeconds: { min: 1, max: 3600 },
+  /** Seconds of prep time in each team's bank. */
+  prepSeconds: { min: 1, max: 3600 },
   teamSize: { min: 1, max: 8 },
   steps: { min: 1, max: 50 },
   topics: { min: 1, max: 100 },
@@ -142,6 +190,8 @@ export function stepSeconds(step: Step): number | null {
     case 'speech':
     case 'consultation':
     case 'free-round':
+    case 'cross-examination':
+    case 'audience-questions':
       return step.seconds;
     case 'vote-before':
     case 'vote-after':
@@ -154,6 +204,8 @@ export function stepTotalSeconds(step: Step): number {
   switch (step.type) {
     case 'speech':
     case 'consultation':
+    case 'cross-examination':
+    case 'audience-questions':
       return step.seconds;
     case 'free-round':
       return step.seconds * 2;
@@ -163,18 +215,25 @@ export function stepTotalSeconds(step: Step): number {
   }
 }
 
-/** Planned length of a debate in this format, in seconds. */
+/** Planned length of a debate in this format, in seconds: every step, and both prep-time banks. */
 export function formatTotalSeconds(format: Format): number {
-  return format.steps.reduce((total, step) => total + stepTotalSeconds(step), 0);
+  const prep = format.prepTime === undefined ? 0 : format.prepTime.secondsPerTeam * SIDES.length;
+  return format.steps.reduce((total, step) => total + stepTotalSeconds(step), prep);
 }
 
-/** The side a step belongs to, or `null` for a step of both teams or of the audience. */
+/**
+ * The side a step belongs to, or `null` for a step of both teams or of the
+ * audience. A cross-examination belongs to the side that asks: its clock is theirs.
+ */
 export function stepSide(step: Step): Side | null {
   switch (step.type) {
     case 'speech':
       return step.side;
+    case 'cross-examination':
+      return step.askingSide;
     case 'consultation':
     case 'free-round':
+    case 'audience-questions':
     case 'vote-before':
     case 'vote-after':
       return null;

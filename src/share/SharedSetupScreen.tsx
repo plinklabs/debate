@@ -135,6 +135,14 @@ export function Contents({ config }: { readonly config: DebateConfig }) {
             <dt>{t('format.teamSize')}</dt>
             <dd>{t('preview.teamSize', format.teamSize)}</dd>
           </div>
+          {format.prepTime !== undefined && (
+            <div>
+              <dt>{t('format.prepTime')}</dt>
+              <dd>
+                {t('preview.perTeam', { duration: formatDuration(format.prepTime.secondsPerTeam) })}
+              </dd>
+            </div>
+          )}
         </dl>
         <dl className={styles.sides}>
           {SIDES.map((side) => (
@@ -163,6 +171,9 @@ function StepLine({ step, format }: { readonly step: Step; readonly format: Form
     // A step without a title of its own goes by its kind; one with a title shows both.
     step.label.trim() === '' || step.label === kind ? null : kind,
     step.type === 'speech' ? format.sides[step.side] : null,
+    step.type === 'cross-examination'
+      ? t('preview.asks', { side: format.sides[step.askingSide] })
+      : null,
     seconds === null
       ? null
       : step.type === 'free-round'
@@ -242,6 +253,8 @@ function issuePlace(t: Translate, path: IssuePath): string | null {
       return item === 'pro' || item === 'con' ? t(`format.side.${item}`) : t('format.sides');
     case 'teamSize':
       return t('format.teamSize');
+    case 'prepTime':
+      return t('format.prepTime');
     default:
       return t('setup.tab.format');
   }

@@ -11,16 +11,18 @@
 import { stepName, stepWho } from '../debate/stepText';
 import { DICTIONARIES, translator, type Translate } from '../i18n/dictionary';
 import { formatDate, formatNumber } from '../i18n/format';
-import { SIDES, stepSeconds, type Format } from '../model/config';
+import { SIDES, otherSide, stepSeconds, type Format } from '../model/config';
 import type { Locale } from '../model/locale';
 import type { AppState } from '../model/reducer';
 import {
   buildReport,
   formatHas,
+  type AudienceQuestionsResult,
   type ClockResult,
   type DebateResult,
   type FreeRoundResult,
   type MemberResult,
+  type PrepResult,
   type StepResult,
   type VoteResult,
 } from '../model/report';
@@ -91,12 +93,12 @@ function debateSection(debate: DebateResult, c: Context): Markup {
 <p class="${debate.done ? 'chip' : 'chip open'}">${status}</p>
 </div>
 <p class="${debate.topic === null ? 'topic gone' : 'topic'}">${topic}</p>
-${whoSpoke(debate, c)}${times(debate, c)}${debate.steps.map((result) => stepSection(result, c))}${vote(debate, c)}</section>
+${whoSpoke(debate, c)}${times(debate, c)}${prep(debate.prep, c)}${debate.steps.map((result) => stepSection(result, c))}${vote(debate, c)}</section>
 `;
 }
 
 // ---------------------------------------------------------------------------
-// Steps. The switches below cover every kind of step: a new kind (#8), or a
+// Steps. The switches below cover every kind of step: a new kind, such as a
 // jury step with scores (#10), needs a case in each before this compiles.
 // ---------------------------------------------------------------------------
 
@@ -111,8 +113,24 @@ function timeRows(result: StepResult, number: number, c: Context): Markup | null
       const who = names.length === 0 ? side : `${side} · ${names.join(', ')}`;
       return timeRow(number, stepName(result.step, t), who, result.clock, c);
     }
-    case 'consultation': {
+    case 'consultation':
+    case 'audience-questions': {
       const who = stepWho(result.step, format, t);
+      return timeRow(number, stepName(result.step, t), who, result.clock, c);
+    }
+    case 'cross-examination': {
+      // Which side asks which, then who asked → who answered.
+      const { askingSide } = result.step;
+      const sides = t('report.crossExam.who', {
+        asking: format.sides[askingSide],
+        answering: format.sides[otherSide(askingSide)],
+      });
+      const names = (members: readonly { readonly name: string }[]) =>
+        members.length === 0 ? '—' : members.map((member) => member.name).join(', ');
+      const who =
+        result.askers.length === 0 && result.answerers.length === 0
+          ? sides
+          : `${sides} · ${names(result.askers)} → ${names(result.answerers)}`;
       return timeRow(number, stepName(result.step, t), who, result.clock, c);
     }
     case 'free-round': {
@@ -133,8 +151,11 @@ function stepSection(result: StepResult, c: Context): Markup | null {
   switch (result.type) {
     case 'free-round':
       return balance(result, c);
+    case 'audience-questions':
+      return answers(result, c);
     case 'speech':
     case 'consultation':
+    case 'cross-examination':
       return null;
     case 'vote-before':
     case 'vote-after':
@@ -155,12 +176,18 @@ interface Count {
 /** Each team with its students, and how often each one spoke. */
 function whoSpoke(debate: DebateResult, c: Context): Markup {
   const { t, format, locale } = c;
-  const speeches = formatHas(format, 'speech');
-  const freeRound = formatHas(format, 'free-round');
   const counts: Count[] = [];
-  if (speeches) counts.push({ label: t('report.speeches'), of: (m) => m.speeches });
-  if (freeRound) counts.push({ label: t('report.freeRound'), of: (m) => m.freeRoundTurns });
-  if (speeches && freeRound) counts.push({ label: t('report.turns'), of: (m) => m.turns });
+  if (formatHas(format, 'speech')) {
+    counts.push({ label: t('report.speeches'), of: (m) => m.speeches });
+  }
+  if (formatHas(format, 'cross-examination')) {
+    counts.push({ label: t('report.crossExaminations'), of: (m) => m.crossExaminations });
+  }
+  if (formatHas(format, 'free-round')) {
+    counts.push({ label: t('report.freeRound'), of: (m) => m.freeRoundTurns });
+  }
+  // The sum, where there is more than one kind of turn to add up.
+  if (counts.length > 1) counts.push({ label: t('report.turns'), of: (m) => m.turns });
 
   const heads = counts.map((count) => markup`<th scope="col" class="num">${count.label}</th>`);
   const rows = (members: readonly MemberResult[]) =>
@@ -252,6 +279,44 @@ function balance(result: FreeRoundResult, c: Context): Markup {
 ${rows}</tbody>
 </table>
 ${bar}`;
+}
+
+/** How many answers each team gave to the audience, as counted. */
+function answers(result: AudienceQuestionsResult, c: Context): Markup {
+  const { t, format, locale } = c;
+  const rows = SIDES.map(
+    (side) =>
+      markup`<tr><th scope="row">${format.sides[side]}</th><td class="num">${formatNumber(locale, result.answers[side])}</td></tr>\n`,
+  );
+  return markup`<h3>${t('report.answers', { step: stepName(result.step, t) })}</h3>
+<table class="answers">
+<thead><tr><th scope="col">${t('report.side')}</th><th scope="col" class="num">${t('report.answerCount')}</th></tr></thead>
+<tbody>
+${rows}</tbody>
+</table>
+`;
+}
+
+/** Each team's prep time: what it used of its bank, what was left, and any overtime. */
+function prep(result: PrepResult | null, c: Context): Markup | null {
+  if (result === null) return null;
+  const { t, format } = c;
+  const rows = SIDES.map((side) => {
+    const { timing } = result.clocks[side];
+    const over =
+      timing.overtime > 0
+        ? markup` <span class="mark over">${t('report.overtime', { time: formatClock(timing.overtime) })}</span>`
+        : null;
+    return markup`<tr><th scope="row">${format.sides[side]}</th><td class="num">${formatClock(timing.used)}</td><td class="num">${formatClock(timing.rest)}${over}</td></tr>\n`;
+  });
+  return markup`<h3>${t('report.prep')}</h3>
+<p class="bank">${t('report.prep.bank', { time: formatClock(result.secondsPerTeam) })}</p>
+<table class="prep">
+<thead><tr><th scope="col">${t('report.side')}</th><th scope="col" class="num">${t('report.used')}</th><th scope="col" class="num">${t('report.left')}</th></tr></thead>
+<tbody>
+${rows}</tbody>
+</table>
+`;
 }
 
 /** The vote before and after: each side's hands, the share for the topic, and the shift. */

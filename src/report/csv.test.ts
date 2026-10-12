@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { DebateConfig } from '../model/config';
 import { GRAFFITI_PRESET } from '../model/presets';
 import type { AppState } from '../model/reducer';
-import { playedSession } from '../test/playedSession';
+import { playedPopperSession, playedSession } from '../test/playedSession';
 import { csvField, csvText, reportCsv } from './csv';
 
 function csv(state: AppState = playedSession(), locale: 'en' | 'nl' = 'en') {
@@ -225,5 +225,85 @@ describe('the CSV', () => {
       ['FOR', 'Bert', '8'],
       ['AGAINST', '', '12'],
     ]);
+  });
+});
+
+describe('the CSV of a Karl Popper debate (#8)', () => {
+  it('numbers the steps whose columns would read the same, and only those', () => {
+    const [header] = table(csv(playedPopperSession()));
+    const roles = header.filter((name) => name.endsWith(' role'));
+    expect(roles).toEqual([
+      '02 Cross-examination (NEGATIVE) role',
+      '04 Cross-examination (AFFIRMATIVE) role',
+      '06 Cross-examination (NEGATIVE) role',
+      '08 Cross-examination (AFFIRMATIVE) role',
+    ]);
+    expect(header).toContain('Constructive (AFFIRMATIVE) planned (s)');
+    expect(header).toContain('Audience questions answers');
+    expect(new Set(header).size).toBe(header.length);
+  });
+
+  it('gives the asking side the clock of a cross-examination, and each student a role', () => {
+    const rows = records(csv(playedPopperSession()));
+    const column = (name: string) => rows.map((row) => row[name]);
+    expect(column('Student')).toEqual(['Ann', 'Bert', 'Cas', 'Dirk', 'Eva', 'Fien']);
+    expect(column('02 Cross-examination (NEGATIVE) role')).toEqual([
+      'answered',
+      '',
+      '',
+      'asked',
+      '',
+      '',
+    ]);
+    expect(column('02 Cross-examination (NEGATIVE) used (s)')).toEqual([
+      '',
+      '',
+      '',
+      '25',
+      '25',
+      '25',
+    ]);
+    expect(column('Turns')).toEqual(['1', '0', '0', '1', '0', '0']);
+  });
+
+  it("gives each row its own team's answers to the audience, and the one clock", () => {
+    const rows = records(csv(playedPopperSession()));
+    expect(rows.map((row) => row['Audience questions answers'])).toEqual([
+      '2',
+      '2',
+      '2',
+      '1',
+      '1',
+      '1',
+    ]);
+    expect(rows.map((row) => row['Audience questions used (s)'])).toEqual(
+      Array.from({ length: 6 }, () => '30'),
+    );
+  });
+
+  it("gives each row its own team's prep time, before whether the debate is finished", () => {
+    const [header, ...lines] = table(csv(playedPopperSession()));
+    expect(header.slice(-5)).toEqual([
+      'Prep time planned (s)',
+      'Prep time used (s)',
+      'Prep time left (s)',
+      'Prep time overtime (s)',
+      'Finished',
+    ]);
+    expect(lines[0].slice(-5)).toEqual(['30', '0', '30', '0', 'yes']);
+    expect(lines[3].slice(-5)).toEqual(['30', '35', '0', '5', 'yes']);
+  });
+
+  it('is written in Dutch', () => {
+    const [header, ...lines] = table(csv(playedPopperSession(), 'nl'));
+    expect(header).toContain('02 Cross-examination (NEGATIVE) rol');
+    expect(header).toContain('Voorbereidingstijd overtijd (s)');
+    const role = header.indexOf('02 Cross-examination (NEGATIVE) rol');
+    expect(lines.map((line) => line[role])).toEqual(['antwoordde', '', '', 'vroeg', '', '']);
+  });
+
+  it('has no prep-time columns for a format without a bank', () => {
+    const [header] = table(csv());
+    expect(header.filter((name) => name.startsWith('Prep time'))).toEqual([]);
   });
 });

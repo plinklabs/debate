@@ -15,6 +15,7 @@ import {
   isValidId,
   type DebateConfig,
   type Format,
+  type PrepTime,
   type Side,
   type Step,
   type StepType,
@@ -302,9 +303,28 @@ function readFormat(root: Json, issues: Issues): Format | undefined {
   const path = ['format'];
   const sides = readSides(format, path, issues);
   const teamSize = readTeamSize(format, path, issues);
+  const prepTime = readPrepTime(format, path, issues);
   const steps = readSteps(format, path, issues);
   if (sides === undefined || teamSize === undefined || steps === undefined) return undefined;
-  return { sides, teamSize, steps };
+  if (prepTime === undefined) return undefined;
+  // No bank, no field: a format without one reads as it did before #8.
+  return prepTime === null ? { sides, teamSize, steps } : { sides, teamSize, prepTime, steps };
+}
+
+/**
+ * The prep-time bank: `null` when the format has none, which is when the
+ * field is missing (as in every config from before #8) or `null`.
+ */
+function readPrepTime(format: Json, path: IssuePath, issues: Issues): PrepTime | null | undefined {
+  const value = Object.hasOwn(format, 'prepTime') ? format.prepTime : undefined;
+  if (value === undefined || value === null) return null;
+  const at = [...path, 'prepTime'];
+  if (!isObject(value)) {
+    issues.push({ code: 'wrong-type', path: at, expected: 'object' });
+    return undefined;
+  }
+  const secondsPerTeam = readInteger(value, 'secondsPerTeam', at, issues, LIMITS.prepSeconds);
+  return secondsPerTeam === undefined ? undefined : { secondsPerTeam };
 }
 
 function readSides(
@@ -391,8 +411,16 @@ function readStep(value: unknown, path: IssuePath, issues: Issues): Step | undef
       if (seconds === undefined) return undefined;
       return { id, type, label, side, seconds };
     }
+    case 'cross-examination': {
+      const askingSide = readSide(value, 'askingSide', path, issues);
+      const seconds = readInteger(value, 'seconds', path, issues, LIMITS.stepSeconds);
+      if (id === undefined || label === undefined || askingSide === undefined) return undefined;
+      if (seconds === undefined) return undefined;
+      return { id, type, label, askingSide, seconds };
+    }
     case 'consultation':
-    case 'free-round': {
+    case 'free-round':
+    case 'audience-questions': {
       const seconds = readInteger(value, 'seconds', path, issues, LIMITS.stepSeconds);
       if (id === undefined || label === undefined || seconds === undefined) return undefined;
       return { id, type, label, seconds };

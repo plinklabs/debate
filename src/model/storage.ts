@@ -12,6 +12,7 @@ import {
   MAX_NAME_LENGTH,
   type Debate,
   type FreeRoundRecord,
+  type PrepRecord,
   type Session,
   type StepRecord,
   type Teams,
@@ -161,8 +162,27 @@ function readDebate(value: unknown): Debate | null {
     teams: readTeams(value.teams),
     step: count(value.step),
     records: readRecords(value.records),
+    // A debate stored before #8 has no prep time: none used.
+    prep: readPrep(value.prep),
     done: value.done === true,
   };
+}
+
+function readPrep(value: unknown): PrepRecord {
+  const clocks = objectOr(objectOr(value).clocks);
+  return { clocks: { pro: pausedTimer(clocks.pro), con: pausedTimer(clocks.con) }, active: null };
+}
+
+/** Slots of a team that spoke, in order, each once. */
+function readSlots(value: unknown): number[] {
+  const slots = listOr(value).map(readSlot).filter(isSlot);
+  return slots.filter((slot, index) => slots.indexOf(slot) === index);
+}
+
+/** The slot that has the floor, when it is one of those that spoke. */
+function readCurrent(value: unknown, slots: readonly number[]): number | null {
+  const slot = readSlot(value);
+  return slot !== null && slots.includes(slot) ? slot : null;
 }
 
 function readTeams(value: unknown): Teams {
@@ -188,20 +208,38 @@ function readRecord(value: unknown): StepRecord | null {
   const type = value.type;
   switch (type) {
     case 'speech': {
-      const slots = listOr(value.speakers).map(readSlot).filter(isSlot);
-      const speakers = slots.filter((slot, index) => slots.indexOf(slot) === index);
-      const current = readSlot(value.current);
+      const speakers = readSlots(value.speakers);
       return {
         type,
         timer: pausedTimer(value.timer),
         speakers,
-        current: current !== null && speakers.includes(current) ? current : null,
+        current: readCurrent(value.current, speakers),
       };
     }
     case 'consultation':
       return { type, timer: pausedTimer(value.timer) };
     case 'free-round':
       return readFreeRound(value);
+    case 'cross-examination': {
+      const askers = readSlots(value.askers);
+      const answerers = readSlots(value.answerers);
+      return {
+        type,
+        timer: pausedTimer(value.timer),
+        askers,
+        answerers,
+        asker: readCurrent(value.asker, askers),
+        answerer: readCurrent(value.answerer, answerers),
+      };
+    }
+    case 'audience-questions': {
+      const answers = objectOr(value.answers);
+      return {
+        type,
+        timer: pausedTimer(value.timer),
+        answers: { pro: count(answers.pro), con: count(answers.con) },
+      };
+    }
     case 'vote-before':
     case 'vote-after':
       return { type, votes: readVotes(value.votes) };
