@@ -9,12 +9,14 @@ import { SIDES, type DebateConfig, type Side } from '../model/config';
 import type { Action, AppState } from '../model/reducer';
 import {
   MAX_NAME_LENGTH,
+  debateStatus,
   hasResults,
   isPlayable,
   membersOf,
   slotCount,
   type Debate,
 } from '../model/session';
+import { ResultsGroup } from '../report/ResultsGroup';
 import styles from './setup.module.css';
 
 /** Ids inside the debates panel, so the focus can be put back on a debate's controls. */
@@ -30,10 +32,24 @@ interface Props {
   readonly dispatch: Dispatch<Action>;
   /** A debate whose Start button gets the focus: the one the teacher just left. */
   readonly focusDebate: string | null;
+  /** The debate the teacher just finished, if any: the results say so. */
+  readonly finishedDebate: string | null;
+  /** A report file the teacher picked, to show before it is loaded. */
+  readonly onOpenReport: (file: File) => void;
 }
 
-/** The debates: a topic each, a team per side, and Start once both teams are complete. */
-export function DebatesPanel({ state, dispatch, focusDebate }: Props) {
+/**
+ * The debates: a topic each, a team per side, and Start once both teams are
+ * complete. Above them, the results: the report of every debate with
+ * results, and a report to open again.
+ */
+export function DebatesPanel({
+  state,
+  dispatch,
+  focusDebate,
+  finishedDebate,
+  onOpenReport,
+}: Props) {
   const { t } = useI18n();
   const prefix = useId();
   const focusLater = useFocusAfterRender();
@@ -63,6 +79,8 @@ export function DebatesPanel({ state, dispatch, focusDebate }: Props) {
         {t('setup.tab.debates')}
       </h2>
       <p className={styles.intro}>{t('debates.intro')}</p>
+
+      <ResultsGroup state={state} finished={finishedDebate} onOpenReport={onOpenReport} />
 
       <NewDebate
         config={config}
@@ -159,9 +177,12 @@ function DebateItem({
   const own = ids(idPrefix, debate.id);
   const topic = config.topics.find((candidate) => candidate.id === debate.topicId);
   const playable = isPlayable(format, debate);
-  const results = hasResults(debate);
-  const status = debate.done ? 'done' : results ? 'started' : playable ? 'ready' : 'incomplete';
-  const start = debate.done ? 'debates.open' : results ? 'debates.continue' : 'debates.start';
+  const status = debateStatus(format, debate);
+  const start = debate.done
+    ? 'debates.open'
+    : hasResults(debate)
+      ? 'debates.continue'
+      : 'debates.start';
 
   return (
     <li>

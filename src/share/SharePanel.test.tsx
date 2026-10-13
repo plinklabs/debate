@@ -5,6 +5,7 @@ import { setTopicText } from '../model/edit';
 import { GRAFFITI_PRESET } from '../model/presets';
 import { initialState, reducer, type Action } from '../model/reducer';
 import { configFileText, decodeConfig, readLinkHash } from '../model/share';
+import { catchDownload } from '../test/download';
 import { unpack } from '../test/link';
 import { renderSetup } from '../test/setupScreen';
 
@@ -30,24 +31,6 @@ async function configIn(link: string): Promise<DebateConfig> {
   const result = await decodeConfig(readLinkHash(new URL(link).hash) ?? '');
   if (!result.ok) throw new Error(JSON.stringify(result.issues));
   return result.config;
-}
-
-/** Catches the file the panel hands the browser to save. */
-function catchDownload() {
-  const saved: { name: string; blob: Blob }[] = [];
-  const blobs: Blob[] = [];
-  vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
-    blobs.push(blob as Blob);
-    return `blob:setup-${blobs.length}`;
-  });
-  vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
-    this: HTMLAnchorElement,
-  ) {
-    const index = Number(this.href.replace('blob:setup-', '')) - 1;
-    saved.push({ name: this.download, blob: blobs[index] });
-  });
-  return saved;
 }
 
 describe('the share panel', () => {

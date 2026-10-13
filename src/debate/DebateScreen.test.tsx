@@ -1,12 +1,13 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DebateConfig } from '../model/config';
-import { GRAFFITI_PRESET } from '../model/presets';
+import { GRAFFITI_PRESET, standardRubric } from '../model/presets';
 import type { Action, AppState } from '../model/reducer';
 import { recordFor } from '../model/session';
 import { isRunning } from '../model/timer';
 import { fakeAudio, fakeWakeLock } from '../test/browserFakes';
 import { openDebate, renderDebate } from '../test/debateScreen';
+import { graffitiWithJury, popperWithQuestions } from '../test/playedSession';
 import { SOUND_STORAGE_KEY } from './sound';
 
 const en = GRAFFITI_PRESET.build('en');
@@ -22,6 +23,7 @@ const openAt = (id: string, config: DebateConfig = en, ...actions: Action[]) =>
 /** The record of a step of debate 1. */
 function recordOf(state: AppState, id: string) {
   const step = state.config.format.steps[indexOf(id, state.config)];
+  if (step.type === 'jury') throw new Error('the jury has no record of its own');
   return recordFor(state.session.debates[0], step);
 }
 
@@ -423,5 +425,390 @@ describe('the debate screen', () => {
     renderDebate({ onBack: back });
     fireEvent.click(button(/Back to the setup/));
     expect(back).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the steps and prep time of #8', () => {
+  // Karl Popper with a bank of 30 s and audience questions at the end, for
+  // teams of two, as openDebate fills them in.
+  const base = popperWithQuestions();
+  const popper: DebateConfig = {
+    ...base,
+    format: { ...base.format, teamSize: { min: 2, max: 3 } },
+  };
+  const popperAt = (id: string, ...actions: Action[]) => openAt(id, popper, ...actions);
+  const prep = (side: string) => within(screen.getByRole('group', { name: `Prep time ${side}` }));
+  const prepClock = (side: string) => screen.getByRole('timer', { name: `Prep time ${side}` });
+
+  it('shows who asks and who answers in a cross-examination, and records both', () => {
+    const { state } = renderDebate({ initial: popperAt('cross-examination-con-1') });
+    expect(title()).toHaveTextContent('Cross-examination');
+    expect(
+      screen.getByText('Step 2 of 11 · NEGATIVE asks, AFFIRMATIVE answers'),
+    ).toBeInTheDocument();
+    expect(
+      steps().getByRole('button', { name: 'Step 2: Cross-examination (NEGATIVE)' }),
+    ).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByText('Tap who asks and who answers.')).toBeInTheDocument();
+    const asks = within(screen.getByRole('group', { name: 'NEGATIVE asks' }));
+    const answers = within(screen.getByRole('group', { name: 'AFFIRMATIVE answers' }));
+    expect(asks.getAllByRole('button').map((name) => name.textContent)).toEqual(['Dirk', 'Eva']);
+    expect(answers.getAllByRole('button').map((name) => name.textContent)).toEqual(['Ann', 'Bert']);
+
+    fireEvent.click(asks.getByRole('button', { name: 'Dirk' }));
+    expect(screen.getByText('Dirk asks')).toBeInTheDocument();
+    // The clock starts with the first question; it is the asking side's.
+    expect(button('Pause')).toBeInTheDocument();
+    fireEvent.click(answers.getByRole('button', { name: 'Bert' }));
+    expect(screen.getByText('Dirk asks, Bert answers')).toBeInTheDocument();
+    expect(answers.getByRole('button', { name: 'Bert' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Asked')).toBeInTheDocument();
+    expect(screen.getByText('Answered')).toBeInTheDocument();
+    expect(recordOf(state(), 'cross-examination-con-1')).toMatchObject({
+      askers: [0],
+      answerers: [1],
+    });
+
+    fireEvent.click(button('Remove Bert from the speakers'));
+    expect(screen.getByText('Dirk asks')).toBeInTheDocument();
+    expect(screen.queryByText('Answered')).not.toBeInTheDocument();
+    expect(recordOf(state(), 'cross-examination-con-1')).toMatchObject({
+      answerers: [],
+      answerer: null,
+    });
+  });
+
+  it('times the audience questions and counts the answers of each team', () => {
+    const { state } = renderDebate({ initial: popperAt('s1') });
+    expect(title()).toHaveTextContent('Audience questions');
+    expect(screen.getByText('Step 11 of 11 · The audience and both teams')).toBeInTheDocument();
+    expect(
+      screen.getByText('The audience asks both teams. Count the answers per team, if you like.'),
+    ).toBeInTheDocument();
+    expect(timer()).toHaveTextContent('2:00');
+    press(' ');
+    later(30_000);
+    expect(timer()).toHaveTextContent('1:30');
+
+    expect(button('One answer fewer for NEGATIVE')).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(button('One answer more for AFFIRMATIVE'));
+    fireEvent.click(button('One answer more for AFFIRMATIVE'));
+    fireEvent.click(button('One answer more for NEGATIVE'));
+    fireEvent.click(button('One answer fewer for AFFIRMATIVE'));
+    const team = (side: string) => screen.getByRole('group', { name: side });
+    expect(team('AFFIRMATIVE')).toHaveTextContent('1 answer');
+    expect(team('NEGATIVE')).toHaveTextContent('1 answer');
+    expect(recordOf(state(), 's1')).toMatchObject({ answers: { pro: 1, con: 1 } });
+    // Counting does not touch the clock.
+    expect(button('Pause')).toBeInTheDocument();
+  });
+
+  it('shows the prep time of both teams; calling it pauses the step, and Start ends it', () => {
+    const { state } = renderDebate({ initial: popperAt('constructive-pro') });
+    expect(screen.getByRole('region', { name: 'Prep time' })).toBeInTheDocument();
+    expect(prepClock('AFFIRMATIVE')).toHaveTextContent('0:30');
+    expect(prepClock('NEGATIVE')).toHaveTextContent('0:30');
+
+    press(' ');
+    later(5_000);
+    expect(timer()).toHaveTextContent('5:55');
+
+    fireEvent.click(prep('NEGATIVE').getByRole('button', { name: 'Call prep' }));
+    expect(button('Start')).toBeInTheDocument();
+    expect(prep('NEGATIVE').getByRole('button', { name: 'Stop prep' })).toBeInTheDocument();
+    later(10_000);
+    expect(prepClock('NEGATIVE')).toHaveTextContent('0:20');
+    expect(prepClock('AFFIRMATIVE')).toHaveTextContent('0:30');
+    expect(timer()).toHaveTextContent('5:55');
+
+    // The other team calls it: the first team's stops.
+    fireEvent.click(prep('AFFIRMATIVE').getByRole('button', { name: 'Call prep' }));
+    later(4_000);
+    expect(prepClock('NEGATIVE')).toHaveTextContent('0:20');
+    expect(prepClock('AFFIRMATIVE')).toHaveTextContent('0:26');
+
+    // Start goes on with the step, and ends the prep time.
+    press(' ');
+    expect(prep('AFFIRMATIVE').getByRole('button', { name: 'Call prep' })).toBeInTheDocument();
+    later(3_000);
+    expect(timer()).toHaveTextContent('5:52');
+    expect(prepClock('AFFIRMATIVE')).toHaveTextContent('0:26');
+    expect(state().session.debates[0].prep.active).toBeNull();
+
+    // Prep time belongs to no step: it goes on to the next one.
+    fireEvent.click(prep('NEGATIVE').getByRole('button', { name: 'Call prep' }));
+    press('ArrowRight');
+    later(5_000);
+    expect(title()).toHaveTextContent('Cross-examination');
+    expect(prepClock('NEGATIVE')).toHaveTextContent('0:15');
+  });
+
+  it('signals once when a bank runs out, and counts on into overtime until stopped', () => {
+    const audio = fakeAudio();
+    const { state } = renderDebate({ initial: popperAt('constructive-pro') });
+    press('Shift'); // a key press lets the page play sound
+    fireEvent.click(prep('AFFIRMATIVE').getByRole('button', { name: 'Call prep' }));
+    later(29_000);
+    expect(prepClock('AFFIRMATIVE')).toHaveTextContent('0:01');
+    expect(status()).toHaveTextContent('');
+    expect(audio.tones()).toBe(0);
+
+    later(1_000);
+    expect(prepClock('AFFIRMATIVE')).toHaveTextContent('0:00');
+    expect(status()).toHaveTextContent('The prep time of AFFIRMATIVE is up.');
+    const signalled = audio.tones();
+    expect(signalled).toBeGreaterThan(0);
+
+    later(12_000);
+    expect(prepClock('AFFIRMATIVE')).toHaveTextContent('+0:12');
+    expect(prep('AFFIRMATIVE').getByText('Overtime')).toBeInTheDocument();
+    expect(status()).toHaveTextContent('');
+    expect(audio.tones()).toBe(signalled);
+    // Nothing stopped it: that is the teacher's call.
+    expect(state().session.debates[0].prep.active).toBe('pro');
+    fireEvent.click(prep('AFFIRMATIVE').getByRole('button', { name: 'Stop prep' }));
+    later(5_000);
+    expect(prepClock('AFFIRMATIVE')).toHaveTextContent('+0:12');
+  });
+
+  it('keeps the screen awake while prep time runs', async () => {
+    const lock = fakeWakeLock();
+    renderDebate({ initial: popperAt('constructive-pro') });
+    const settle = () => act(async () => {});
+    fireEvent.click(prep('NEGATIVE').getByRole('button', { name: 'Call prep' }));
+    await settle();
+    expect(lock.held()).toBe(1);
+    fireEvent.click(prep('NEGATIVE').getByRole('button', { name: 'Stop prep' }));
+    await settle();
+    expect(lock.held()).toBe(0);
+  });
+
+  it('shows no prep time in a format without a bank', () => {
+    renderDebate({ initial: openAt('opening-pro') });
+    expect(screen.queryByRole('region', { name: 'Prep time' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Call prep' })).not.toBeInTheDocument();
+  });
+
+  it('is in Dutch in a Dutch screen', () => {
+    renderDebate({ locale: 'nl', initial: popperAt('cross-examination-con-1') });
+    expect(
+      screen.getByText('Stap 2 van 11 · NEGATIVE vraagt, AFFIRMATIVE antwoordt'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Tik op wie vraagt en op wie antwoordt.')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Voorbereidingstijd' })).toBeInTheDocument();
+    const negative = screen.getByRole('group', { name: 'Voorbereidingstijd NEGATIVE' });
+    expect(within(negative).getByRole('button', { name: 'Tijd nemen' })).toBeInTheDocument();
+  });
+});
+
+describe('the jury of #10', () => {
+  const juryAt = (config: DebateConfig = graffitiWithJury(), ...actions: Action[]) =>
+    openAt('s1', config, ...actions);
+  const jurors = () => within(screen.getByRole('group', { name: 'Jurors' }));
+  /** The open juror's sheet for a team or a student. */
+  const sheet = (juror: string, who: string) =>
+    within(
+      within(screen.getByRole('region', { name: `Score sheet of ${juror}` })).getByRole('group', {
+        name: who,
+      }),
+    );
+  const level = (juror: string, who: string, criterion: string, value: number) =>
+    within(sheet(juror, who).getByRole('group', { name: criterion })).getByRole('radio', {
+      name: String(value),
+    });
+  const jurorsOf = (state: AppState) => state.session.debates[0].jury.jurors;
+
+  it('shows a score sheet per team on the stage, without a clock', () => {
+    renderDebate({ initial: juryAt() });
+    expect(title()).toHaveTextContent('Jury');
+    expect(screen.getByText('Step 11 of 11 · The jury')).toBeInTheDocument();
+    expect(screen.queryByRole('timer')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Start' })).not.toBeInTheDocument();
+    expect(button('Finish debate')).toBeInTheDocument();
+
+    expect(jurors().getByRole('button', { name: 'Juror 1' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    for (const team of ['FOR', 'AGAINST']) {
+      const criteria = sheet('Juror 1', team).getAllByRole('group');
+      expect(criteria.map((group) => group.querySelector('legend')?.textContent)).toEqual([
+        'Content and arguments',
+        'Rebuttal',
+        'Evidence and examples',
+        'Delivery',
+      ]);
+      expect(sheet('Juror 1', team).getAllByRole('radio')).toHaveLength(16);
+      expect(sheet('Juror 1', team).getByText('— / 16')).toBeInTheDocument();
+    }
+  });
+
+  it('records a score, says what it means and adds up the total; a score can be taken back', () => {
+    const { state } = renderDebate({ initial: juryAt() });
+    fireEvent.click(level('Juror 1', 'FOR', 'Content and arguments', 3));
+    fireEvent.click(level('Juror 1', 'FOR', 'Delivery', 4));
+    expect(level('Juror 1', 'FOR', 'Content and arguments', 3)).toBeChecked();
+    expect(
+      sheet('Juror 1', 'FOR').getByText('Clear and relevant arguments, mostly well explained.'),
+    ).toBeInTheDocument();
+    expect(sheet('Juror 1', 'FOR').getByText('7 / 16')).toBeInTheDocument();
+    expect(jurorsOf(state())[0].scores).toEqual({ pro: { content: 3, delivery: 4 } });
+
+    fireEvent.click(button('Clear the score of FOR for Delivery'));
+    expect(level('Juror 1', 'FOR', 'Delivery', 4)).not.toBeChecked();
+    expect(sheet('Juror 1', 'FOR').getByText('3 / 16')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Clear the score of FOR for Delivery' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('lets the arrow keys move between levels, not between steps', () => {
+    const { state } = renderDebate({ initial: juryAt() });
+    const radio = level('Juror 1', 'AGAINST', 'Rebuttal', 2);
+    fireEvent.click(radio);
+    press('ArrowRight', radio);
+    press('ArrowLeft', radio);
+    expect(state().session.debates[0].step).toBe(10);
+  });
+
+  it('takes jurors one after another: each their own sheet, then every total and the average', () => {
+    const { state } = renderDebate({ initial: juryAt() });
+    for (const [criterion, value] of [
+      ['Content and arguments', 3],
+      ['Rebuttal', 2],
+    ] as const) {
+      fireEvent.click(level('Juror 1', 'FOR', criterion, value));
+    }
+    expect(screen.queryByRole('region', { name: 'Totals of all jurors' })).not.toBeInTheDocument();
+
+    fireEvent.click(jurors().getByRole('button', { name: 'Add juror' }));
+    expect(jurors().getByRole('button', { name: 'Juror 2' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(level('Juror 2', 'FOR', 'Content and arguments', 3)).not.toBeChecked();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Name of this juror (optional)' }), {
+      target: { value: 'Mr. Smith' },
+    });
+    fireEvent.click(level('Mr. Smith', 'FOR', 'Content and arguments', 4));
+    fireEvent.click(level('Mr. Smith', 'AGAINST', 'Content and arguments', 1));
+
+    const totals = within(screen.getByRole('region', { name: 'Totals of all jurors' }));
+    expect(
+      totals
+        .getAllByRole('row')
+        .map((row) => [...row.querySelectorAll('th, td')].map((cell) => cell.textContent)),
+    ).toEqual([
+      ['Side', 'Juror 1', 'Mr. Smith', 'Average'],
+      ['FOR', '5', '4', '4.5'],
+      ['AGAINST', '—', '1', '1'],
+    ]);
+
+    fireEvent.click(jurors().getByRole('button', { name: 'Juror 1' }));
+    expect(level('Juror 1', 'FOR', 'Content and arguments', 3)).toBeChecked();
+    expect(jurorsOf(state()).map((juror) => [juror.id, juror.name])).toEqual([
+      ['j1', ''],
+      ['j2', 'Mr. Smith'],
+    ]);
+  });
+
+  it('takes a juror off with their scores, after asking', () => {
+    const { state } = renderDebate({
+      initial: juryAt(
+        graffitiWithJury(),
+        { type: 'add-juror' },
+        {
+          type: 'set-score',
+          jurorId: 'j2',
+          target: { side: 'pro', slot: null },
+          criterionId: 'content',
+          score: 2,
+        },
+      ),
+    });
+    fireEvent.click(button('Remove Juror 2'));
+    expect(screen.getByRole('group', { name: 'Remove Juror 2' })).toHaveTextContent(
+      'Remove Juror 2, with every score they gave?',
+    );
+    expect(button('Cancel')).toHaveFocus();
+    fireEvent.click(button('Remove juror'));
+    expect(jurorsOf(state()).map((juror) => juror.id)).toEqual(['j1']);
+    expect(jurors().getByRole('button', { name: 'Juror 1' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    // The last one stays: there is always a sheet to fill in.
+    expect(screen.queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument();
+  });
+
+  it('clears every juror and score with Clear step, after asking', () => {
+    const { state } = renderDebate({ initial: juryAt(graffitiWithJury(), { type: 'add-juror' }) });
+    fireEvent.click(level('Juror 2', 'FOR', 'Rebuttal', 1));
+    fireEvent.click(button('Clear step'));
+    expect(
+      screen.getByText('Clear the time, the speakers, the votes or the scores of this step?'),
+    ).toBeInTheDocument();
+    fireEvent.click(button('Clear'));
+    expect(state().session.debates[0].jury).toEqual({ jurors: [], current: null });
+    expect(
+      jurors()
+        .getAllByRole('button')
+        .map((juror) => juror.textContent),
+    ).toEqual(['Juror 1', '+ Add juror']);
+  });
+
+  it('scores each student, by name and side, when the rubric says so', () => {
+    const { state } = renderDebate({ initial: juryAt(graffitiWithJury('student')) });
+    expect(screen.getByText(/^Score each student on every criterion/)).toBeInTheDocument();
+    const region = within(screen.getByRole('region', { name: 'Score sheet of Juror 1' }));
+    expect(
+      region
+        .getAllByRole('group')
+        .filter((group) => group.parentElement?.tagName === 'SECTION')
+        .map((group) => group.querySelector('legend')?.textContent),
+    ).toEqual(['Ann (FOR)', 'Bert (FOR)', 'Dirk (AGAINST)', 'Eva (AGAINST)']);
+    fireEvent.click(level('Juror 1', 'Eva (AGAINST)', 'Delivery', 2));
+    expect(jurorsOf(state())[0].scores).toEqual({ 'con-1': { delivery: 2 } });
+  });
+
+  it('shows the weight of a criterion that counts more', () => {
+    const base = graffitiWithJury();
+    const rubric = base.format.rubric;
+    if (rubric === undefined) throw new Error('no rubric');
+    const weighed: DebateConfig = {
+      ...base,
+      format: {
+        ...base.format,
+        rubric: {
+          ...rubric,
+          criteria: rubric.criteria.map((criterion) =>
+            criterion.id === 'content' ? { ...criterion, weight: 2 } : criterion,
+          ),
+        },
+      },
+    };
+    renderDebate({ initial: juryAt(weighed) });
+    expect(sheet('Juror 1', 'FOR').getByText('· counts 2×')).toBeInTheDocument();
+    fireEvent.click(level('Juror 1', 'FOR', 'Content and arguments · counts 2×', 4));
+    expect(sheet('Juror 1', 'FOR').getByText('8 / 20')).toBeInTheDocument();
+  });
+
+  it('is in Dutch in a Dutch screen', () => {
+    const base = graffitiWithJury();
+    const dutch: DebateConfig = {
+      ...base,
+      format: { ...base.format, rubric: { ...standardRubric('nl'), scope: 'team' } },
+    };
+    renderDebate({ locale: 'nl', initial: juryAt(dutch) });
+    expect(title()).toHaveTextContent('Juryoordeel');
+    expect(screen.getByText('Stap 11 van 11 · De jury')).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('group', { name: 'Juryleden' })).getByRole('button', {
+        name: 'Jurylid 1',
+      }),
+    ).toBeInTheDocument();
+    const region = within(screen.getByRole('region', { name: 'Scoreblad van Jurylid 1' }));
+    expect(region.getAllByRole('group', { name: 'Inhoud en argumenten' })).toHaveLength(2);
+    expect(region.getAllByText('Totaal')).toHaveLength(2);
   });
 });

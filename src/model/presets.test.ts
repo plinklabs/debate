@@ -1,8 +1,17 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { stepSeconds, stepSide, type DebateConfig } from './config';
+import { formatTotalSeconds, stepSeconds, stepSide, type DebateConfig } from './config';
 import { LOCALES } from './locale';
-import { DEFAULT_PRESET, GRAFFITI_PRESET, PRESETS, defaultConfig, findPreset } from './presets';
+import {
+  DEFAULT_PRESET,
+  GRAFFITI_PRESET,
+  KARL_POPPER_PRESET,
+  PRESETS,
+  PUBLIC_DEBATE_PRESET,
+  defaultConfig,
+  findPreset,
+  standardRubric,
+} from './presets';
 import { parseConfig } from './validate';
 
 // The original app, verbatim from debat-logic.ts in yvanvds/cursus-esthetica
@@ -120,6 +129,94 @@ describe('graffiti preset', () => {
   });
 });
 
+describe('Karl Popper preset', () => {
+  // "The Karl Popper Debate Format", Debate Central, University of Vermont
+  // (presets.ts): who speaks or asks, and for how many minutes.
+  const SOURCE = [
+    ['speech', 'pro', 6], // affirmative speech, student 1
+    ['cross-examination', 'con', 3], // negative cross-examination, student 3
+    ['speech', 'con', 6], // negative speech, student 1
+    ['cross-examination', 'pro', 3], // affirmative cross-examination, student 3
+    ['speech', 'pro', 5], // affirmative speech, student 2
+    ['cross-examination', 'con', 3], // negative cross-examination, student 1
+    ['speech', 'con', 5], // negative speech, student 2
+    ['cross-examination', 'pro', 3], // affirmative cross-examination, student 1
+    ['speech', 'pro', 5], // affirmative speech and closing remarks, student 3
+    ['speech', 'con', 5], // negative speech and closing remarks, student 3
+  ] as const;
+
+  it('has the speeches and cross-examinations of the source, in order and on time', () => {
+    const steps = KARL_POPPER_PRESET.build('en').format.steps;
+    expect(steps.map((step) => [step.type, stepSide(step), (stepSeconds(step) ?? 0) / 60])).toEqual(
+      SOURCE,
+    );
+  });
+
+  it('gives each team a bank of 4 minutes of prep time, three students a side, and no vote', () => {
+    const { format } = KARL_POPPER_PRESET.build('nl');
+    expect(format.prepTime).toEqual({ secondsPerTeam: 240 });
+    expect(format.teamSize).toEqual({ min: 3, max: 3 });
+    expect(format.steps.some((step) => step.type.startsWith('vote'))).toBe(false);
+    // 44 minutes of speaking and questions, and 4 minutes for each team to prepare.
+    expect(formatTotalSeconds(format)).toBe((44 + 8) * 60);
+  });
+
+  it('calls its sides affirmative and negative, in either language', () => {
+    expect(KARL_POPPER_PRESET.build('en').format.sides).toEqual({
+      pro: 'AFFIRMATIVE',
+      con: 'NEGATIVE',
+    });
+    expect(KARL_POPPER_PRESET.build('nl').format.sides).toEqual({
+      pro: 'BEVESTIGEND',
+      con: 'ONTKENNEND',
+    });
+    expect(KARL_POPPER_PRESET.build('nl').format.steps[1].label).toBe('Kruisverhoor');
+  });
+
+  it('can be found by its id', () => {
+    expect(findPreset('karl-popper')).toBe(KARL_POPPER_PRESET);
+  });
+});
+
+describe('public debate preset', () => {
+  it('opens and closes with the audience vote, with questions from the audience in between', () => {
+    const { format } = PUBLIC_DEBATE_PRESET.build('en');
+    expect(format.steps.map((step) => [step.type, stepSide(step), stepSeconds(step)])).toEqual([
+      ['vote-before', null, null],
+      ['speech', 'pro', 7 * 60],
+      ['speech', 'con', 7 * 60],
+      ['audience-questions', null, 10 * 60],
+      ['speech', 'pro', 2 * 60],
+      ['speech', 'con', 2 * 60],
+      ['vote-after', null, null],
+    ]);
+    expect(formatTotalSeconds(format)).toBe(28 * 60);
+  });
+
+  it('has two debaters a side, no prep-time bank, and Dutch labels in Dutch', () => {
+    const { format } = PUBLIC_DEBATE_PRESET.build('nl');
+    expect(format.teamSize).toEqual({ min: 2, max: 2 });
+    expect(Object.hasOwn(format, 'prepTime')).toBe(false);
+    expect(format.sides).toEqual({ pro: 'VOOR', con: 'TEGEN' });
+    expect(format.steps[3].label).toBe('Vragen uit het publiek');
+    expect(PUBLIC_DEBATE_PRESET.name).toEqual({ en: 'Public debate', nl: 'Publiek debat' });
+  });
+
+  it('can be found by its id', () => {
+    expect(findPreset('public-debate')).toBe(PUBLIC_DEBATE_PRESET);
+  });
+});
+
+describe('the presets', () => {
+  it('are the graffiti debate, Karl Popper and the public debate, each with its own id', () => {
+    expect(PRESETS.map((preset) => preset.id)).toEqual([
+      'graffiti',
+      'karl-popper',
+      'public-debate',
+    ]);
+  });
+});
+
 describe.each(PRESETS.map((preset) => [preset.id, preset] as const))('preset %s', (_, preset) => {
   it.each(LOCALES)('is a valid config in %s, with every label filled in', (locale) => {
     const config = preset.build(locale);
@@ -132,5 +229,70 @@ describe.each(PRESETS.map((preset) => [preset.id, preset] as const))('preset %s'
   it('differs between locales in its labels only', () => {
     const [first, ...others] = LOCALES.map((locale) => withoutLabels(preset.build(locale)));
     for (const other of others) expect(other).toEqual(first);
+  });
+});
+
+describe('the standard rubric (#10)', () => {
+  it.each(LOCALES)(
+    'scores the teams on four criteria from 1 to 4, counting the same, in %s',
+    (locale) => {
+      const rubric = standardRubric(locale);
+      expect(rubric.scale).toEqual({ min: 1, max: 4 });
+      expect(rubric.scope).toBe('team');
+      expect(rubric.criteria.map((criterion) => criterion.id)).toEqual([
+        'content',
+        'rebuttal',
+        'evidence',
+        'delivery',
+      ]);
+      for (const criterion of rubric.criteria) {
+        expect(criterion.weight).toBe(1);
+        // A short line for every level.
+        expect(criterion.levels).toHaveLength(4);
+        for (const line of criterion.levels) expect(line).toMatch(/^\S.{9,119}$/);
+      }
+      // It is a valid rubric for any preset, with a jury step to score on it.
+      const config = GRAFFITI_PRESET.build(locale);
+      const withJury: DebateConfig = {
+        ...config,
+        format: {
+          ...config.format,
+          rubric,
+          steps: [...config.format.steps, { id: 'jury', type: 'jury', label: '' }],
+        },
+      };
+      expect(parseConfig(withJury)).toEqual({ ok: true, config: withJury });
+    },
+  );
+
+  it('has its labels and levels in each language, and the rest the same', () => {
+    const [en, nl] = LOCALES.map(standardRubric);
+    expect(en.criteria.map((criterion) => criterion.label)).toEqual([
+      'Content and arguments',
+      'Rebuttal',
+      'Evidence and examples',
+      'Delivery',
+    ]);
+    expect(nl.criteria.map((criterion) => criterion.label)).toEqual([
+      'Inhoud en argumenten',
+      'Weerlegging',
+      'Bewijs en voorbeelden',
+      'Presentatie',
+    ]);
+    const shape = (rubric: typeof en) => ({
+      ...rubric,
+      criteria: rubric.criteria.map(({ id, weight }) => ({ id, weight })),
+    });
+    expect(shape(nl)).toEqual(shape(en));
+    en.criteria.forEach((criterion, index) => {
+      for (const [level, line] of criterion.levels.entries()) {
+        expect(nl.criteria[index].levels[level]).not.toBe(line);
+      }
+    });
+  });
+
+  it('is a fresh rubric each time, so editing one leaves the next alone', () => {
+    expect(standardRubric('en')).not.toBe(standardRubric('en'));
+    expect(standardRubric('en').criteria[0]).not.toBe(standardRubric('en').criteria[0]);
   });
 });

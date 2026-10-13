@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { SIDES, type DebateConfig, type Side, type Step } from './config';
-import { GRAFFITI_PRESET } from './presets';
+import { GRAFFITI_PRESET, KARL_POPPER_PRESET, PUBLIC_DEBATE_PRESET } from './presets';
 import {
   anyRunning,
   currentDebate,
@@ -12,15 +12,21 @@ import {
   type AppState,
 } from './reducer';
 import {
+  debateRunning,
+  hasResults,
   isPlayable,
+  prepClocks,
   recordFor,
   shiftOf,
   turnsOf,
+  type AudienceQuestionsRecord,
+  type CrossExaminationRecord,
   type Debate,
   type FreeRoundRecord,
+  type RecordedStep,
   type SpeechRecord,
 } from './session';
-import { elapsedMs, isRunning, timingOf } from './timer';
+import { countdown, elapsedMs, formatCountdown, isRunning, timingOf } from './timer';
 
 const config = GRAFFITI_PRESET.build('nl');
 const { format } = config;
@@ -32,9 +38,10 @@ function apply(state: AppState, ...actions: Action[]): AppState {
   return actions.reduce(reducer, state);
 }
 
-function stepById(id: string, steps: readonly Step[] = format.steps): Step {
+/** A step with a record of its own: any but the jury. */
+function stepById(id: string, steps: readonly Step[] = format.steps): RecordedStep {
   const step = steps.find((candidate) => candidate.id === id);
-  if (step === undefined) throw new Error(`no step ${id}`);
+  if (step === undefined || step.type === 'jury') throw new Error(`no step ${id} with a record`);
   return step;
 }
 
@@ -338,6 +345,21 @@ describe('debates and teams', () => {
     const s = apply(withTeams(), { type: 'reset-session' });
     expect(s).toEqual(initialState(config));
   });
+
+  it('replaces the setup and the session with a loaded state', () => {
+    const other = GRAFFITI_PRESET.build('en');
+    const loaded: AppState = {
+      config: other,
+      session: {
+        debates: withTeams().session.debates.map((d) => ({ ...d, done: true })),
+        current: null,
+      },
+    };
+    const running = apply(withTeams(), { type: 'open-debate', debateId: 'd1', now: at(0) });
+    const s = reducer(running, { type: 'load-state', state: loaded });
+    expect(s).toEqual(loaded);
+    expect(anyRunning(s)).toBe(false);
+  });
 });
 
 describe('stepping through a debate', () => {
@@ -399,11 +421,11 @@ describe('stepping through a debate', () => {
       { type: 'tap-speaker', side: 'pro', slot: 2, now: at(4) },
     );
     expect(speech(s, 'opening-pro')).toMatchObject({ speakers: [2, 0], current: 2 });
-    s = reducer(s, { type: 'remove-speaker', slot: 2 });
+    s = reducer(s, { type: 'remove-speaker', side: 'pro', slot: 2 });
     expect(speech(s, 'opening-pro')).toMatchObject({ speakers: [0], current: 0 });
-    s = reducer(s, { type: 'remove-speaker', slot: 0 });
+    s = reducer(s, { type: 'remove-speaker', side: 'pro', slot: 0 });
     expect(speech(s, 'opening-pro')).toMatchObject({ speakers: [], current: null });
-    expect(reducer(s, { type: 'remove-speaker', slot: 0 })).toBe(s);
+    expect(reducer(s, { type: 'remove-speaker', side: 'pro', slot: 0 })).toBe(s);
   });
 
   it('corrects free-round turns without going below zero', () => {
@@ -554,6 +576,349 @@ describe('freeze', () => {
     expect(frozen.session.current).toBe('d1');
     expect(freeze(frozen, at(20))).toBe(frozen);
     expect(isRunning(freeRound(s).clocks.con)).toBe(true); // the original is untouched
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #8: cross-examination, audience questions and the prep-time bank
+// ---------------------------------------------------------------------------
+
+const popper = KARL_POPPER_PRESET.build('nl');
+
+/** A Karl Popper debate, three against three, open at `step` (by id) at 0 s. */
+function popperAt(stepId: string): AppState {
+  return apply(
+    initialState(popper),
+    { type: 'add-debate', topicId: 't1' },
+    ...names('d1', { pro: ['Ann', 'Bert', 'Cas'], con: ['Dirk', 'Eva', 'Fien'] }),
+    { type: 'open-debate', debateId: 'd1', now: at(0) },
+    {
+      type: 'go-to-step',
+      step: popper.format.steps.findIndex((step) => step.id === stepId),
+      now: at(0),
+    },
+  );
+}
+
+function crossExamination(state: AppState, stepId: string): CrossExaminationRecord {
+  const record = recordFor(debateOf(state), stepById(stepId, state.config.format.steps));
+  if (record.type !== 'cross-examination') throw new Error(`${stepId} is no cross-examination`);
+  return record;
+}
+
+function popperSpeech(state: AppState, stepId: string): SpeechRecord {
+  const record = recordFor(debateOf(state), stepById(stepId, popper.format.steps));
+  if (record.type !== 'speech') throw new Error(`${stepId} is not a speech`);
+  return record;
+}
+
+/** What a team has left of its bank at `now`, as its clock shows it: `3:00`, or `+0:12` over. */
+function bankLeft(state: AppState, side: Side, now: number): string {
+  const clock = prepClocks(state.config.format, debateOf(state)).find((c) => c.side === side);
+  if (clock === undefined) throw new Error('no prep-time bank');
+  return formatCountdown(countdown(clock.seconds, elapsedMs(clock.timer, now)));
+}
+
+const prepRuns = (state: AppState) => debateOf(state).prep.active;
+
+describe('prep time', () => {
+  it('runs down the bank of the team that calls it, and stops the clock of the step', () => {
+    let s = apply(popperAt('cross-examination-con-1'), {
+      type: 'tap-speaker',
+      side: 'con',
+      slot: 0,
+      now: at(0),
+    });
+    expect(isRunning(crossExamination(s, 'cross-examination-con-1').timer)).toBe(true);
+
+    s = reducer(s, { type: 'toggle-prep', side: 'con', now: at(30) });
+    expect(prepRuns(s)).toBe('con');
+    expect(crossExamination(s, 'cross-examination-con-1').timer).toEqual({
+      accMs: 30_000,
+      since: null,
+    });
+    expect(bankLeft(s, 'con', at(90))).toBe('3:00');
+    expect(bankLeft(s, 'pro', at(90))).toBe('4:00');
+    expect(hasResults(debateOf(s))).toBe(true);
+  });
+
+  it('pauses when the team calls it again, and goes on later from what is left', () => {
+    const s = apply(
+      popperAt('constructive-pro'),
+      { type: 'toggle-prep', side: 'pro', now: at(0) },
+      { type: 'toggle-prep', side: 'pro', now: at(50) },
+    );
+    expect(prepRuns(s)).toBeNull();
+    expect(bankLeft(s, 'pro', at(500))).toBe('3:10');
+    const later = reducer(s, { type: 'toggle-prep', side: 'pro', now: at(600) });
+    expect(bankLeft(later, 'pro', at(640))).toBe('2:30');
+  });
+
+  it('runs for one team at a time: a call by the other team stops the first', () => {
+    const s = apply(
+      popperAt('constructive-pro'),
+      { type: 'toggle-prep', side: 'pro', now: at(0) },
+      { type: 'toggle-prep', side: 'con', now: at(20) },
+    );
+    expect(prepRuns(s)).toBe('con');
+    expect(debateOf(s).prep.clocks.pro).toEqual({ accMs: 20_000, since: null });
+    expect(bankLeft(s, 'pro', at(100))).toBe('3:40');
+    expect(bankLeft(s, 'con', at(100))).toBe('2:40');
+  });
+
+  it('ends when the teacher goes on with the step, with Start or a tap on a name', () => {
+    const started = apply(
+      popperAt('constructive-con'),
+      { type: 'toggle-prep', side: 'con', now: at(0) },
+      { type: 'toggle-timer', now: at(15) },
+    );
+    expect(prepRuns(started)).toBeNull();
+    expect(bankLeft(started, 'con', at(100))).toBe('3:45');
+    expect(isRunning(popperSpeech(started, 'constructive-con').timer)).toBe(true);
+
+    const tapped = apply(
+      popperAt('constructive-con'),
+      { type: 'toggle-prep', side: 'pro', now: at(0) },
+      { type: 'tap-speaker', side: 'con', slot: 1, now: at(5) },
+    );
+    expect(prepRuns(tapped)).toBeNull();
+    expect(popperSpeech(tapped, 'constructive-con').speakers).toEqual([1]);
+  });
+
+  it('is not ended by Start on a step without a clock to start', () => {
+    const s = apply(
+      initialState(setBank(PUBLIC_DEBATE_PRESET.build('en'), 60)),
+      { type: 'add-debate', topicId: 't1' },
+      ...names('d1', { pro: ['Ann', 'Bert'], con: ['Dirk', 'Eva'] }),
+      { type: 'open-debate', debateId: 'd1', now: at(0) },
+      { type: 'toggle-prep', side: 'pro', now: at(0) },
+      { type: 'toggle-timer', now: at(5) }, // the vote before has no clock
+    );
+    expect(prepRuns(s)).toBe('pro');
+  });
+
+  it('goes on from one step to the next: it belongs to no step', () => {
+    const s = apply(
+      popperAt('constructive-pro'),
+      { type: 'toggle-prep', side: 'con', now: at(0) },
+      { type: 'next-step', now: at(10) },
+      { type: 'go-to-step', step: 5, now: at(20) },
+      { type: 'previous-step', now: at(30) },
+    );
+    expect(prepRuns(s)).toBe('con');
+    expect(bankLeft(s, 'con', at(40))).toBe('3:20');
+  });
+
+  it('counts on into overtime when a bank runs out, until the teacher stops it', () => {
+    let s = apply(popperAt('rebuttal-pro'), { type: 'toggle-prep', side: 'pro', now: at(0) });
+    expect(bankLeft(s, 'pro', at(239.5))).toBe('0:01');
+    expect(bankLeft(s, 'pro', at(240))).toBe('0:00');
+    // Past the bank nothing stops by itself: the time-up signal is the screen's
+    // (as for any clock), the decision the teacher's.
+    expect(bankLeft(s, 'pro', at(252))).toBe('+0:12');
+    expect(countdown(240, at(252))).toEqual({ over: true, seconds: 12 });
+    expect(prepRuns(s)).toBe('pro');
+    expect(debateRunning(debateOf(s))).toBe(true);
+
+    s = reducer(s, { type: 'toggle-prep', side: 'pro', now: at(252) });
+    expect(bankLeft(s, 'pro', at(400))).toBe('+0:12');
+    expect(timingOf(240, elapsedMs(debateOf(s).prep.clocks.pro, at(400)))).toEqual({
+      planned: 240,
+      used: 252,
+      rest: 0,
+      overtime: 12,
+    });
+    // A team whose bank is used up can still call more; it all counts as overtime.
+    s = reducer(s, { type: 'toggle-prep', side: 'pro', now: at(400) });
+    expect(bankLeft(s, 'pro', at(410))).toBe('+0:22');
+  });
+
+  it('cannot be called in a format without a bank', () => {
+    const s = apply(withTeams(), { type: 'open-debate', debateId: 'd1', now: at(0) });
+    expect(reducer(s, { type: 'toggle-prep', side: 'pro', now: at(1) })).toBe(s);
+    expect(prepClocks(format, debateOf(s))).toEqual([]);
+  });
+
+  it('stops when the debate is closed, finished or stored, and when another opens', () => {
+    const s = apply(popperAt('constructive-pro'), {
+      type: 'toggle-prep',
+      side: 'con',
+      now: at(0),
+    });
+    for (const action of [
+      { type: 'close-debate', now: at(10) },
+      { type: 'finish-debate', now: at(10) },
+      { type: 'set-config', config: popper, now: at(10) },
+    ] as const) {
+      const after = reducer(s, action);
+      expect(prepRuns(after)).toBeNull();
+      expect(debateOf(after).prep.clocks.con).toEqual({ accMs: 10_000, since: null });
+    }
+    const frozen = freeze(s, at(10));
+    expect(anyRunning(frozen)).toBe(false);
+    expect(debateOf(frozen).prep.clocks.con).toEqual({ accMs: 10_000, since: null });
+
+    const other = apply(
+      s,
+      { type: 'add-debate', topicId: 't1' },
+      ...names('d2', { pro: ['Gert', 'Hanne', 'Ilse'], con: ['Jan', 'Kim', 'Lot'] }),
+      { type: 'open-debate', debateId: 'd2', now: at(10) },
+    );
+    expect(prepRuns(other)).toBeNull();
+  });
+
+  it('is kept apart from the steps: clearing a step leaves it alone', () => {
+    const s = apply(
+      popperAt('constructive-pro'),
+      { type: 'toggle-prep', side: 'con', now: at(0) },
+      { type: 'toggle-prep', side: 'con', now: at(30) },
+      { type: 'clear-step' },
+    );
+    expect(debateOf(s).prep.clocks.con.accMs).toBe(30_000);
+  });
+});
+
+/** The format with a prep-time bank of this many seconds per team. */
+function setBank(base: DebateConfig, secondsPerTeam: number): DebateConfig {
+  return { ...base, format: { ...base.format, prepTime: { secondsPerTeam } } };
+}
+
+describe('a cross-examination', () => {
+  it('records who asks and who answers, and either tap starts the clock', () => {
+    let s = popperAt('cross-examination-con-1');
+    s = reducer(s, { type: 'tap-speaker', side: 'pro', slot: 0, now: at(2) });
+    expect(crossExamination(s, 'cross-examination-con-1')).toEqual({
+      type: 'cross-examination',
+      timer: { accMs: 0, since: at(2) },
+      askers: [],
+      answerers: [0],
+      asker: null,
+      answerer: 0,
+    });
+    s = apply(
+      s,
+      { type: 'tap-speaker', side: 'con', slot: 2, now: at(3) },
+      { type: 'tap-speaker', side: 'pro', slot: 1, now: at(40) },
+      { type: 'tap-speaker', side: 'pro', slot: 0, now: at(50) },
+      { type: 'toggle-timer', now: at(62) },
+    );
+    expect(crossExamination(s, 'cross-examination-con-1')).toEqual({
+      type: 'cross-examination',
+      timer: { accMs: 60_000, since: null },
+      askers: [2],
+      answerers: [0, 1],
+      asker: 2,
+      answerer: 0,
+    });
+    // Asking counts as a turn for the asker, answering for the one who answered.
+    expect(turnsOf(popper.format, debateOf(s), 'con', 2)).toBe(1);
+    expect(turnsOf(popper.format, debateOf(s), 'pro', 1)).toBe(1);
+    expect(turnsOf(popper.format, debateOf(s), 'con', 0)).toBe(0);
+  });
+
+  it('starts and pauses with Start, like a speech', () => {
+    const s = apply(
+      popperAt('cross-examination-pro-1'),
+      { type: 'toggle-timer', now: at(1) },
+      { type: 'toggle-timer', now: at(181) },
+    );
+    expect(crossExamination(s, 'cross-examination-pro-1').timer).toEqual({
+      accMs: 180_000,
+      since: null,
+    });
+  });
+
+  it('takes only filled-in names', () => {
+    const s = apply(popperAt('cross-examination-pro-1'), {
+      type: 'set-name',
+      debateId: 'd1',
+      side: 'con',
+      slot: 2,
+      name: '',
+    });
+    expect(reducer(s, { type: 'tap-speaker', side: 'con', slot: 2, now: at(1) })).toBe(s);
+  });
+
+  it('takes back an asker or an answerer, by side', () => {
+    let s = apply(
+      popperAt('cross-examination-pro-1'),
+      { type: 'tap-speaker', side: 'pro', slot: 2, now: at(1) },
+      { type: 'tap-speaker', side: 'con', slot: 0, now: at(2) },
+      { type: 'tap-speaker', side: 'con', slot: 1, now: at(3) },
+    );
+    // Slot 0 asked nothing: the slot of the other side is not touched.
+    expect(reducer(s, { type: 'remove-speaker', side: 'pro', slot: 0 })).toBe(s);
+    s = reducer(s, { type: 'remove-speaker', side: 'con', slot: 1 });
+    expect(crossExamination(s, 'cross-examination-pro-1')).toMatchObject({
+      askers: [2],
+      answerers: [0],
+      asker: 2,
+      answerer: 0,
+    });
+    s = reducer(s, { type: 'remove-speaker', side: 'pro', slot: 2 });
+    expect(crossExamination(s, 'cross-examination-pro-1')).toMatchObject({
+      askers: [],
+      asker: null,
+    });
+  });
+
+  it('is not a speech: a speech takes back only its own side', () => {
+    const s = apply(popperAt('constructive-pro'), {
+      type: 'tap-speaker',
+      side: 'pro',
+      slot: 0,
+      now: at(1),
+    });
+    expect(popperSpeech(s, 'constructive-pro').speakers).toEqual([0]);
+    expect(reducer(s, { type: 'remove-speaker', side: 'con', slot: 0 })).toBe(s);
+  });
+});
+
+describe('audience questions', () => {
+  function questionsAt(): AppState {
+    const config = PUBLIC_DEBATE_PRESET.build('en');
+    return apply(
+      initialState(config),
+      { type: 'add-debate', topicId: 't1' },
+      ...names('d1', { pro: ['Ann', 'Bert'], con: ['Dirk', 'Eva'] }),
+      { type: 'open-debate', debateId: 'd1', now: at(0) },
+      { type: 'go-to-step', step: 3, now: at(0) },
+    );
+  }
+
+  function questions(state: AppState): AudienceQuestionsRecord {
+    const record = recordFor(
+      debateOf(state),
+      stepById('audience-questions', state.config.format.steps),
+    );
+    if (record.type !== 'audience-questions') throw new Error('no audience questions');
+    return record;
+  }
+
+  it('runs one clock, and counts the answers of each team', () => {
+    const s = apply(
+      questionsAt(),
+      { type: 'toggle-timer', now: at(0) },
+      { type: 'adjust-answers', side: 'pro', delta: 1 },
+      { type: 'adjust-answers', side: 'pro', delta: 1 },
+      { type: 'adjust-answers', side: 'con', delta: 1 },
+      { type: 'adjust-answers', side: 'pro', delta: -1 },
+      { type: 'toggle-timer', now: at(300) },
+    );
+    expect(questions(s)).toEqual({
+      type: 'audience-questions',
+      timer: { accMs: 300_000, since: null },
+      answers: { pro: 1, con: 1 },
+    });
+  });
+
+  it('never counts below zero, nor anything but whole steps, nor on another step', () => {
+    const s = questionsAt();
+    expect(reducer(s, { type: 'adjust-answers', side: 'con', delta: -1 })).toBe(s);
+    expect(reducer(s, { type: 'adjust-answers', side: 'con', delta: 0.5 })).toBe(s);
+    expect(reducer(s, { type: 'adjust-answers', side: 'con', delta: 0 })).toBe(s);
+    const vote = reducer(s, { type: 'go-to-step', step: 0, now: at(1) });
+    expect(reducer(vote, { type: 'adjust-answers', side: 'con', delta: 1 })).toBe(vote);
   });
 });
 

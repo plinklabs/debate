@@ -1,0 +1,27 @@
+/* A slim, flat bar under the header: raised paper and a hairline, no shadow,
+   in the flow of the page so it covers nothing. */
+
+.notice {
+  border-bottom: var(--border-width) solid var(--border);
+  background: var(--surface-raised);
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  max-width: var(--container);
+  margin: 0 auto;
+  padding: var(--space-2) var(--gutter);
+}
+
+.text {
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .bar {
+    padding: var(--space-2) var(--space-4);
+  }
+}

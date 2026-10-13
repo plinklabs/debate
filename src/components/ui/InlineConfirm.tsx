@@ -9,6 +9,8 @@ interface Props {
   /** The button's name when its text needs context ("Remove debate 2"). */
   readonly triggerLabel?: string;
   readonly variant?: ButtonVariant;
+  /** A class for the button, for one on a surface the variants were not made for. */
+  readonly triggerClassName?: string;
   /** What will happen, asked in place of the button. */
   readonly question: string;
   /** The text on the button that goes ahead. */
@@ -25,6 +27,7 @@ export function InlineConfirm({
   trigger,
   triggerLabel,
   variant = 'outline',
+  triggerClassName,
   question,
   confirm,
   onConfirm,
@@ -46,6 +49,7 @@ export function InlineConfirm({
       <Button
         ref={triggerRef}
         variant={variant}
+        className={triggerClassName}
         aria-label={triggerLabel}
         onClick={() => setAsking(true)}
       >

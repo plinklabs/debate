@@ -7,11 +7,15 @@
 // stored setup goes through the same validation as a link or a file.
 
 import { LIMITS, isValidId, type DebateConfig, type Side } from './config';
+import { MAX_JURORS, isTargetKey } from './jury';
 import { freeze, initialState, type AppState } from './reducer';
 import {
   MAX_NAME_LENGTH,
   type Debate,
   type FreeRoundRecord,
+  type Juror,
+  type JuryRecord,
+  type PrepRecord,
   type Session,
   type StepRecord,
   type Teams,
@@ -22,7 +26,8 @@ import { clampVotes, type Votes } from './votes';
 
 export const STORAGE_KEY = 'plinklabs:debate:v1';
 
-const STORAGE_VERSION = 1;
+/** The version of what is stored, and of the saved state inside a report (reportFile.ts). */
+export const STORAGE_VERSION = 1;
 
 /** The part of the Web Storage API this needs; `window.localStorage` fits. */
 export interface KeyValueStore {
@@ -136,7 +141,12 @@ function readVotes(value: unknown): Votes {
   return { pro: clampVotes(count(votes.pro)), con: clampVotes(count(votes.con)) };
 }
 
-function readSession(value: unknown): Session {
+/**
+ * A session from outside the app's own code (storage, a report file), read
+ * defensively: what does not have the expected shape is dropped, every timer
+ * comes back paused, names and counts are cut to their limits.
+ */
+export function readSession(value: unknown): Session {
   const data = objectOr(value);
   const debates: Debate[] = [];
   for (const item of listOr(data.debates)) {
@@ -155,8 +165,69 @@ function readDebate(value: unknown): Debate | null {
     teams: readTeams(value.teams),
     step: count(value.step),
     records: readRecords(value.records),
+    // A debate stored before #8 has no prep time: none used.
+    prep: readPrep(value.prep),
+    // One stored before #10 has no jury: nobody scored.
+    jury: readJury(value.jury),
     done: value.done === true,
   };
+}
+
+function readPrep(value: unknown): PrepRecord {
+  const clocks = objectOr(objectOr(value).clocks);
+  return { clocks: { pro: pausedTimer(clocks.pro), con: pausedTimer(clocks.con) }, active: null };
+}
+
+/**
+ * The jurors, each once, with their scores. A score is kept when it is a
+ * whole number that some rubric's scale can have: whether it is on the scale
+ * of this format is for the reader (jury.ts), as the scale may change.
+ */
+function readJury(value: unknown): JuryRecord {
+  const data = objectOr(value);
+  const jurors: Juror[] = [];
+  for (const item of listOr(data.jurors)) {
+    const juror = readJuror(item);
+    if (juror !== null && !jurors.some((other) => other.id === juror.id)) jurors.push(juror);
+    if (jurors.length === MAX_JURORS) break;
+  }
+  const current = jurors.find((juror) => juror.id === data.current) ?? jurors[0];
+  return { jurors, current: current?.id ?? null };
+}
+
+function readJuror(value: unknown): Juror | null {
+  if (!isObject(value) || !isValidId(value.id)) return null;
+  const scores: Record<string, Record<string, number>> = {};
+  for (const [key, raw] of Object.entries(objectOr(value.scores))) {
+    if (!isTargetKey(key)) continue;
+    const sheet: Record<string, number> = {};
+    for (const [criterion, score] of Object.entries(objectOr(raw))) {
+      if (isValidId(criterion) && isScoreValue(score)) sheet[criterion] = score;
+    }
+    if (Object.keys(sheet).length > 0) scores[key] = sheet;
+  }
+  return {
+    id: value.id,
+    name: typeof value.name === 'string' ? value.name.slice(0, MAX_NAME_LENGTH) : '',
+    scores,
+  };
+}
+
+function isScoreValue(value: unknown): value is number {
+  const { min, max } = LIMITS.rubricScale;
+  return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max;
+}
+
+/** Slots of a team that spoke, in order, each once. */
+function readSlots(value: unknown): number[] {
+  const slots = listOr(value).map(readSlot).filter(isSlot);
+  return slots.filter((slot, index) => slots.indexOf(slot) === index);
+}
+
+/** The slot that has the floor, when it is one of those that spoke. */
+function readCurrent(value: unknown, slots: readonly number[]): number | null {
+  const slot = readSlot(value);
+  return slot !== null && slots.includes(slot) ? slot : null;
 }
 
 function readTeams(value: unknown): Teams {
@@ -182,20 +253,38 @@ function readRecord(value: unknown): StepRecord | null {
   const type = value.type;
   switch (type) {
     case 'speech': {
-      const slots = listOr(value.speakers).map(readSlot).filter(isSlot);
-      const speakers = slots.filter((slot, index) => slots.indexOf(slot) === index);
-      const current = readSlot(value.current);
+      const speakers = readSlots(value.speakers);
       return {
         type,
         timer: pausedTimer(value.timer),
         speakers,
-        current: current !== null && speakers.includes(current) ? current : null,
+        current: readCurrent(value.current, speakers),
       };
     }
     case 'consultation':
       return { type, timer: pausedTimer(value.timer) };
     case 'free-round':
       return readFreeRound(value);
+    case 'cross-examination': {
+      const askers = readSlots(value.askers);
+      const answerers = readSlots(value.answerers);
+      return {
+        type,
+        timer: pausedTimer(value.timer),
+        askers,
+        answerers,
+        asker: readCurrent(value.asker, askers),
+        answerer: readCurrent(value.answerer, answerers),
+      };
+    }
+    case 'audience-questions': {
+      const answers = objectOr(value.answers);
+      return {
+        type,
+        timer: pausedTimer(value.timer),
+        answers: { pro: count(answers.pro), con: count(answers.con) },
+      };
+    }
     case 'vote-before':
     case 'vote-after':
       return { type, votes: readVotes(value.votes) };

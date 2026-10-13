@@ -19,6 +19,7 @@ const SAMPLE_ISSUES: { readonly [C in ConfigIssueCode]: IssueOf<C> } = {
   'invalid-json': { code: 'invalid-json', path: [] },
   'invalid-link': { code: 'invalid-link', path: [] },
   'too-large': { code: 'too-large', path: [] },
+  'not-a-report': { code: 'not-a-report', path: [] },
   'newer-version': { code: 'newer-version', path: ['version'], found: 2, supported: 1 },
   'invalid-version': { code: 'invalid-version', path: ['version'] },
   'missing-field': { code: 'missing-field', path: ['format'] },
@@ -49,6 +50,9 @@ const SAMPLE_ISSUES: { readonly [C in ConfigIssueCode]: IssueOf<C> } = {
   },
   'team-size-order': { code: 'team-size-order', path: ['format', 'teamSize'], min: 4, max: 2 },
   'vote-order': { code: 'vote-order', path: ['format', 'steps', 0] },
+  'unknown-scope': { code: 'unknown-scope', path: ['format', 'rubric', 'scope'], scope: 'class' },
+  'scale-order': { code: 'scale-order', path: ['format', 'rubric', 'scale'], min: 4, max: 1 },
+  'jury-without-rubric': { code: 'jury-without-rubric', path: ['format', 'steps', 9] },
 };
 
 const ALL_ISSUES: readonly ConfigIssue[] = Object.values(SAMPLE_ISSUES);

@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { CONFIG_VERSION, LIMITS, type DebateConfig, type Step } from './config';
-import { GRAFFITI_PRESET } from './presets';
+import { CONFIG_VERSION, LIMITS, scaleLevels, type DebateConfig, type Step } from './config';
+import { LOCALES } from './locale';
+import { GRAFFITI_PRESET, PRESETS, standardRubric } from './presets';
 import { initialState, reducer, type Action } from './reducer';
 import {
   MAX_LINK_LENGTH,
@@ -32,9 +33,11 @@ function largestConfig(): DebateConfig {
   const next = random(42);
   const text = (length: number) =>
     Array.from({ length }, () => String.fromCharCode(0x4e00 + Math.floor(next() * 20000))).join('');
+  // The step type with the most fields.
   const steps: Step[] = Array.from({ length: LIMITS.steps.max }, (_, index) => ({
     id: `step-${index}-${'x'.repeat(LIMITS.idLength - 10)}`.slice(0, LIMITS.idLength),
-    type: 'free-round',
+    type: 'cross-examination',
+    askingSide: 'con',
     label: text(LIMITS.stepLabelLength),
     seconds: LIMITS.stepSeconds.max,
   }));
@@ -43,6 +46,20 @@ function largestConfig(): DebateConfig {
     format: {
       sides: { pro: text(LIMITS.sideLabelLength), con: text(LIMITS.sideLabelLength) },
       teamSize: { min: 1, max: LIMITS.teamSize.max },
+      prepTime: { secondsPerTeam: LIMITS.prepSeconds.max },
+      // The largest rubric: every criterion with a line for every level.
+      rubric: {
+        scale: LIMITS.rubricScale,
+        scope: 'student',
+        criteria: Array.from({ length: LIMITS.criteria.max }, (_, index) => ({
+          id: `criterion-${index}-${'z'.repeat(LIMITS.idLength)}`.slice(0, LIMITS.idLength),
+          label: text(LIMITS.criterionLabelLength),
+          weight: LIMITS.criterionWeight.max,
+          levels: Array.from({ length: scaleLevels(LIMITS.rubricScale) }, () =>
+            text(LIMITS.levelLength),
+          ),
+        })),
+      },
       steps,
     },
     topics: Array.from({ length: LIMITS.topics.max }, (_, index) => ({
@@ -61,6 +78,13 @@ describe('a setup as a link', () => {
     expect(await decodeConfig(encoded)).toEqual({ ok: true, config });
   });
 
+  it.each(
+    PRESETS.flatMap((preset) => LOCALES.map((locale) => [preset.id, locale, preset] as const)),
+  )('comes back the same from the %s preset in %s', async (_, locale, preset) => {
+    const config = preset.build(locale);
+    expect(await decodeConfig(await encodeConfig(config))).toEqual({ ok: true, config });
+  });
+
   it('is base64url of the deflated JSON, short enough to paste anywhere', async () => {
     const encoded = await encodeConfig(GRAFFITI_EN);
     expect(encoded).toMatch(/^[A-Za-z0-9_-]+$/);
@@ -75,6 +99,18 @@ describe('a setup as a link', () => {
     const encoded = await encodeConfig(config);
     expect(encoded.length).toBeLessThan(MAX_LINK_LENGTH);
     expect(await decodeConfig(encoded)).toEqual({ ok: true, config });
+  });
+
+  it('carries the jury’s rubric and step (#10)', async () => {
+    const config: DebateConfig = {
+      ...GRAFFITI_EN,
+      format: {
+        ...GRAFFITI_EN.format,
+        rubric: standardRubric('en'),
+        steps: [...GRAFFITI_EN.format.steps, { id: 'jury', type: 'jury', label: 'Jury' }],
+      },
+    };
+    expect(await decodeConfig(await encodeConfig(config))).toEqual({ ok: true, config });
   });
 
   it('keeps text in any script, and characters JSON must escape', async () => {

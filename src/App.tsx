@@ -7,9 +7,11 @@ import type { Locale } from './model/locale';
 import { defaultConfig } from './model/presets';
 import { anyRunning, currentDebate, reducer, type AppState } from './model/reducer';
 import { loadState, saveState } from './model/storage';
+import { UpdateNotice } from './offline/UpdateNotice';
+import { ReportPreviewScreen } from './report/ReportPreviewScreen';
 import { useConfigEditor } from './setup/configEditor';
 import { SetupScreen, type SetupTab } from './setup/SetupScreen';
-import { useIncomingSetup } from './share/incoming';
+import { isReport, useIncomingSetup } from './share/incoming';
 import { SharedSetupScreen } from './share/SharedSetupScreen';
 
 const browserStorage = () => window.localStorage;
@@ -23,18 +25,22 @@ function startState(locale: Locale): AppState {
  * The app: the header, and the setup or the open debate. Which screen shows
  * follows the app state: a debate that is open (`session.current`) has the
  * screen, so a reload comes back to it. The URL hash is not used for this; it
- * carries a shared setup (`#c=…`, #5), which is shown before anything else
- * until the teacher uses it or not.
+ * carries a shared setup (`#c=…`, #5). That, a setup file, or a report file
+ * opened to go on with its debates (#7), is shown before anything else until
+ * the teacher uses it or not. Under the header, a notice offers a new version
+ * once one is ready (#9).
  */
 export function App() {
   const { locale } = useI18n();
   const [state, dispatch] = useReducer(reducer, locale, startState);
   const editor = useConfigEditor(state.config, dispatch);
-  const { incoming, openFile, close } = useIncomingSetup();
+  const { incoming, openFile, openReport, close } = useIncomingSetup();
   const [tab, setTab] = useState<SetupTab>(() =>
     state.session.debates.length > 0 ? 'debates' : 'topics',
   );
   const [leftDebate, setLeftDebate] = useState<string | null>(null);
+  // The debate just finished: the debates tab offers its report.
+  const [finishedDebate, setFinishedDebate] = useState<string | null>(null);
 
   // Everything is kept in this browser as it changes; the setup keeps the
   // labels it was made with, whatever the UI language becomes.
@@ -82,6 +88,16 @@ export function App() {
     editor.apply(config);
     setTab('topics');
     setLeftDebate(null);
+    setFinishedDebate(null);
+    close();
+  };
+
+  // A report replaces everything; the debates tab shows what it brought.
+  const loadReport = (loaded: AppState) => {
+    dispatch({ type: 'load-state', state: loaded });
+    setTab('debates');
+    setLeftDebate(null);
+    setFinishedDebate(null);
     close();
   };
 
@@ -89,6 +105,7 @@ export function App() {
   const leave = (debateId: string, type: 'close-debate' | 'finish-debate') => {
     setTab('debates');
     setLeftDebate(debateId);
+    setFinishedDebate(type === 'finish-debate' ? debateId : null);
     dispatch({ type, now: performance.now() });
   };
 
@@ -97,8 +114,23 @@ export function App() {
   return (
     <>
       <AppHeader />
+      <UpdateNotice />
       {incoming !== null ? (
-        <SharedSetupScreen incoming={incoming} state={state} onUse={applyShared} onClose={close} />
+        isReport(incoming) ? (
+          <ReportPreviewScreen
+            incoming={incoming}
+            state={state}
+            onLoad={loadReport}
+            onClose={close}
+          />
+        ) : (
+          <SharedSetupScreen
+            incoming={incoming}
+            state={state}
+            onUse={applyShared}
+            onClose={close}
+          />
+        )
       ) : open === null ? (
         <SetupScreen
           state={state}
@@ -107,10 +139,13 @@ export function App() {
           onTabChange={(next) => {
             // The way back from a debate is taken: the focus stays on the tabs now.
             setLeftDebate(null);
+            setFinishedDebate(null);
             setTab(next);
           }}
           focusDebate={leftDebate}
+          finishedDebate={finishedDebate}
           onOpenFile={openFile}
+          onOpenReport={openReport}
         />
       ) : (
         <DebateScreen

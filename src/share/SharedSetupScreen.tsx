@@ -101,7 +101,7 @@ export function SharedSetupScreen({ incoming, state, onUse, onClose }: Props) {
 }
 
 /** The topics and the format, as they would be used. */
-function Contents({ config }: { readonly config: DebateConfig }) {
+export function Contents({ config }: { readonly config: DebateConfig }) {
   const { t, formatDuration, formatNumber } = useI18n();
   const prefix = useId();
   const { format, topics } = config;
@@ -135,6 +135,27 @@ function Contents({ config }: { readonly config: DebateConfig }) {
             <dt>{t('format.teamSize')}</dt>
             <dd>{t('preview.teamSize', format.teamSize)}</dd>
           </div>
+          {format.prepTime !== undefined && (
+            <div>
+              <dt>{t('format.prepTime')}</dt>
+              <dd>
+                {t('preview.perTeam', { duration: formatDuration(format.prepTime.secondsPerTeam) })}
+              </dd>
+            </div>
+          )}
+          {format.rubric !== undefined && (
+            <div>
+              <dt>{t('format.rubric')}</dt>
+              <dd>
+                {t('preview.rubric', {
+                  count: format.rubric.criteria.length,
+                  min: format.rubric.scale.min,
+                  max: format.rubric.scale.max,
+                  perStudent: format.rubric.scope === 'student',
+                })}
+              </dd>
+            </div>
+          )}
         </dl>
         <dl className={styles.sides}>
           {SIDES.map((side) => (
@@ -150,6 +171,25 @@ function Contents({ config }: { readonly config: DebateConfig }) {
             <StepLine key={step.id} step={step} format={format} />
           ))}
         </ol>
+        {format.rubric !== undefined && (
+          <>
+            <h3 className={`${setup.groupTitle} ${styles.listTitle}`}>
+              {t('format.rubric.criteria')}
+            </h3>
+            <ol className={styles.steps}>
+              {format.rubric.criteria.map((criterion) => (
+                <li key={criterion.id} className={styles.step}>
+                  <span className={styles.stepName}>{criterion.label}</span>
+                  {criterion.weight !== 1 && (
+                    <span className={styles.stepDetails}>
+                      {t('preview.weight', { weight: criterion.weight })}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </>
+        )}
       </section>
     </div>
   );
@@ -163,6 +203,9 @@ function StepLine({ step, format }: { readonly step: Step; readonly format: Form
     // A step without a title of its own goes by its kind; one with a title shows both.
     step.label.trim() === '' || step.label === kind ? null : kind,
     step.type === 'speech' ? format.sides[step.side] : null,
+    step.type === 'cross-examination'
+      ? t('preview.asks', { side: format.sides[step.askingSide] })
+      : null,
     seconds === null
       ? null
       : step.type === 'free-round'
@@ -201,7 +244,7 @@ function Impact({ impact }: { readonly impact: ReplaceImpact }) {
 }
 
 /** What is wrong, where it is known: "Topic 3: This cannot be empty." */
-function Problems({ issues }: { readonly issues: readonly ConfigIssue[] }) {
+export function Problems({ issues }: { readonly issues: readonly ConfigIssue[] }) {
   const { t, describeIssue } = useI18n();
   const lines = new Map<string, { place: string | null; text: string }>();
   for (const issue of issues) {
@@ -242,6 +285,14 @@ function issuePlace(t: Translate, path: IssuePath): string | null {
       return item === 'pro' || item === 'con' ? t(`format.side.${item}`) : t('format.sides');
     case 'teamSize':
       return t('format.teamSize');
+    case 'prepTime':
+      return t('format.prepTime');
+    case 'rubric': {
+      const criterion = path[3];
+      return item === 'criteria' && typeof criterion === 'number'
+        ? t('format.rubric.criterion', { number: criterion + 1 })
+        : t('format.rubric');
+    }
     default:
       return t('setup.tab.format');
   }

@@ -4,8 +4,10 @@ import { InlineConfirm } from '../components/ui/InlineConfirm';
 import a11y from '../components/ui/a11y.module.css';
 import { useI18n } from '../i18n';
 import type { Action, AppState, OpenDebate } from '../model/reducer';
-import { clocksOf, recordFor, runningClock } from '../model/session';
+import { clocksOf, prepClocks, recordFor, runningClock } from '../model/session';
+import { isRunning } from '../model/timer';
 import styles from './debate.module.css';
+import { PrepBank } from './PrepBank';
 import { StepPanel } from './StepPanel';
 import { StepProgress } from './StepProgress';
 import { stepName, stepWho } from './stepText';
@@ -30,8 +32,10 @@ interface Props {
  * The open debate, run in front of the class: the steps of the format, and
  * on the stage the current step with its large clock, who has the floor, and
  * the audience vote. Start, pause and step on with the buttons or the keys.
- * When a clock reaches zero, a sound plays (unless muted) and the stage
- * signals it; the screen stays awake while a clock runs.
+ * A format with a prep-time bank has it on the stage too: each team's
+ * balance, and a button to call prep time. When a clock reaches zero, a sound
+ * plays (unless muted) and the stage signals it; the screen stays awake while
+ * a clock runs.
  */
 export function DebateScreen({ state, open, dispatch, onBack, onFinish }: Props) {
   const { t } = useI18n();
@@ -45,10 +49,15 @@ export function DebateScreen({ state, open, dispatch, onBack, onFinish }: Props)
 
   const clocks = clocksOf(debate, step);
   const running = runningClock(debate, step);
-  const now = useNow(running?.timer ?? null);
+  // At most one clock runs: a step's, or a team's prep time.
+  const prep = prepClocks(format, debate);
+  const prepping = prep.find((clock) => isRunning(clock.timer)) ?? null;
+  const now = useNow(running?.timer ?? prepping?.timer ?? null);
   const sound = useSound();
   const signal = useTimeUp(`${debate.id}:${step.id}`, clocks, now, sound.timeUp);
-  useWakeLock(running !== null);
+  const prepSignal = useTimeUp(`${debate.id}:prep`, prep, now, sound.timeUp);
+  useWakeLock(running !== null || prepping !== null);
+  const preppingSide = debate.prep.active;
 
   // A free round's clock starts with a tap on a name; after that, Start resumes it.
   const canStart =
@@ -107,18 +116,33 @@ export function DebateScreen({ state, open, dispatch, onBack, onFinish }: Props)
 
       <section className={styles.stage} aria-labelledby={stepHeading}>
         <div className={`${styles.inner} ${styles.stageInner}`}>
-          <p className={styles.stageEyebrow}>
-            {`${t('debate.stepOf', { number: stepIndex + 1, total: format.steps.length })} · ${stepWho(step, format, t)}`}
-          </p>
-          <h2 id={stepHeading} className={styles.stepTitle}>
-            {stepName(step, t)}
-          </h2>
+          <div className={styles.stageHead}>
+            <div className={styles.stageName}>
+              <p className={styles.stageEyebrow}>
+                {`${t('debate.stepOf', { number: stepIndex + 1, total: format.steps.length })} · ${stepWho(step, format, t)}`}
+              </p>
+              <h2 id={stepHeading} className={styles.stepTitle}>
+                {stepName(step, t)}
+              </h2>
+            </div>
+            <PrepBank format={format} debate={debate} now={now} dispatch={dispatch} />
+          </div>
           <StepPanel step={step} debate={debate} format={format} now={now} dispatch={dispatch} />
         </div>
-        {signal.on && <div key={signal.count} className={styles.signal} aria-hidden="true" />}
+        {(signal.on || prepSignal.on) && (
+          <div
+            key={`${signal.count}:${prepSignal.count}`}
+            className={styles.signal}
+            aria-hidden="true"
+          />
+        )}
       </section>
       <p role="status" className={a11y.visuallyHidden}>
-        {signal.on ? t('debate.timeUp') : ''}
+        {prepSignal.on && preppingSide !== null
+          ? t('debate.prep.timeUp', { side: format.sides[preppingSide] })
+          : signal.on || prepSignal.on
+            ? t('debate.timeUp')
+            : ''}
       </p>
 
       <div className={styles.controls}>

@@ -218,6 +218,90 @@
   max-width: 40rem;
 }
 
+.groupIntro {
+  max-width: 62ch;
+  margin: 0 0 var(--space-3);
+  color: var(--text-muted);
+}
+
+/* Prep time: on or off, and below it the seconds each team gets. */
+.prepRow {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.prepSeconds {
+  width: min(100%, 14rem);
+}
+
+/* The jury's rubric: the scale and who is scored on one row, then the criteria. */
+.rubricStart {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.rubricSettings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: var(--space-3) var(--space-4);
+  max-width: 44rem;
+}
+
+.rubricTotal {
+  margin: var(--space-3) 0 0;
+  font-family: var(--font-mono);
+  letter-spacing: var(--label-tracking-tight);
+  color: var(--text-muted);
+}
+
+.subTitle {
+  margin: var(--space-5) 0 var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  font-weight: var(--label-weight);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* A criterion: its name, wide, and its weight, narrow. */
+.criterionFields {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
+  gap: var(--space-3) var(--space-4);
+  max-width: 44rem;
+}
+
+.levelsBox {
+  max-width: 44rem;
+  margin-top: var(--space-3);
+}
+
+.levelsSummary {
+  min-height: 2.75rem;
+  padding: var(--space-2) 0;
+  font-family: var(--font-mono);
+  letter-spacing: var(--label-tracking-tight);
+  cursor: pointer;
+}
+
+.levelFields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-2) 0 0 var(--space-4);
+  border-left: var(--border-width) solid var(--border);
+}
+
+.rubricNote {
+  max-width: 62ch;
+  margin: var(--space-3) 0 0;
+  color: var(--text-muted);
+}
+
 .presetRow {
   display: flex;
   flex-wrap: wrap;
@@ -413,6 +497,14 @@
 
   .stepFields {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .criterionFields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .levelFields {
+    padding-left: var(--space-3);
   }
 
   .debate {

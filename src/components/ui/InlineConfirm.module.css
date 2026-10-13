@@ -9,6 +9,8 @@
   border: var(--border-width) solid var(--ink);
   border-radius: var(--radius);
   background: var(--surface-raised);
+  /* Ink on paper, also where it opens on the ink stage. */
+  color: var(--text);
 }
 
 .question {

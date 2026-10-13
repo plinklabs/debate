@@ -29,6 +29,8 @@ function rawConfig(): RawConfig {
         { id: 'opening', type: 'speech', side: 'pro', seconds: 60, label: 'Opening' },
         { id: 'prepare', type: 'consultation', seconds: 60, label: 'Prepare' },
         { id: 'free', type: 'free-round', seconds: 90, label: 'Free round' },
+        { id: 'cross', type: 'cross-examination', askingSide: 'con', seconds: 180, label: 'CX' },
+        { id: 'questions', type: 'audience-questions', seconds: 300, label: 'Questions' },
         { id: 'vote-after', type: 'vote-after', label: 'Vote' },
       ],
     },
@@ -61,6 +63,8 @@ describe('parseConfig: valid input', () => {
       'speech',
       'consultation',
       'free-round',
+      'cross-examination',
+      'audience-questions',
       'vote-after',
     ]);
   });
@@ -78,6 +82,8 @@ describe('parseConfig: valid input', () => {
     raw.format.steps[0].seconds = 30; // a vote has no timer
     raw.format.steps[1].speakers = ['Ann'];
     raw.format.steps[2].side = 'pro'; // a consultation belongs to both teams
+    raw.format.steps[4].side = 'pro'; // a cross-examination has a side that asks
+    raw.format.steps[5].answers = { pro: 3, con: 1 }; // counted in a session, not here
     raw.topics[0].names = ['Ann'];
 
     const config = configOf(raw);
@@ -92,6 +98,8 @@ describe('parseConfig: valid input', () => {
           { id: 'opening', type: 'speech', side: 'pro', seconds: 60, label: 'Opening' },
           { id: 'prepare', type: 'consultation', seconds: 60, label: 'Prepare' },
           { id: 'free', type: 'free-round', seconds: 90, label: 'Free round' },
+          { id: 'cross', type: 'cross-examination', askingSide: 'con', seconds: 180, label: 'CX' },
+          { id: 'questions', type: 'audience-questions', seconds: 300, label: 'Questions' },
           { id: 'vote-after', type: 'vote-after', label: 'Vote' },
         ],
       },
@@ -181,12 +189,12 @@ describe('parseConfig: malformed input', () => {
 
   it('rejects an unknown step type', () => {
     const raw = rawConfig();
-    raw.format.steps[2].type = 'cross-examination';
+    raw.format.steps[2].type = 'dance';
     expect(issuesOf(raw)).toEqual([
       {
         code: 'unknown-step-type',
         path: ['format', 'steps', 2, 'type'],
-        stepType: 'cross-examination',
+        stepType: 'dance',
       },
     ]);
   });
@@ -292,7 +300,7 @@ describe('parseConfig: malformed input', () => {
     expect(issuesOf(twice)).toEqual([
       {
         code: 'duplicate-step-type',
-        path: ['format', 'steps', 5, 'type'],
+        path: ['format', 'steps', 7, 'type'],
         stepType: 'vote-after',
       },
     ]);
@@ -313,6 +321,306 @@ describe('parseConfig: malformed input', () => {
       { code: 'wrong-type', path: ['format', 'steps', 1, 'label'], expected: 'string' },
       { code: 'wrong-type', path: ['format', 'steps', 2], expected: 'object' },
       { code: 'wrong-type', path: ['topics'], expected: 'array' },
+    ]);
+  });
+});
+
+describe('parseConfig: cross-examination, audience questions and prep time (#8)', () => {
+  it('reads a config without a prep-time bank, as from before #8, unchanged', () => {
+    const raw = rawConfig();
+    expect(configOf(raw)).toStrictEqual(raw);
+    expect(Object.hasOwn(configOf(raw).format, 'prepTime')).toBe(false);
+  });
+
+  it('reads a prep-time bank of null as none', () => {
+    const raw = rawConfig();
+    raw.format.prepTime = null;
+    expect(Object.hasOwn(configOf(raw).format, 'prepTime')).toBe(false);
+  });
+
+  it('keeps a prep-time bank, and only its known field', () => {
+    const raw = rawConfig();
+    raw.format.prepTime = { secondsPerTeam: 240, used: { pro: 30 } };
+    expect(configOf(raw).format.prepTime).toStrictEqual({ secondsPerTeam: 240 });
+  });
+
+  const at = ['format', 'prepTime', 'secondsPerTeam'];
+
+  it.each([
+    [{}, { code: 'missing-field', path: at }],
+    [{ secondsPerTeam: 0 }, { code: 'out-of-range', path: at, value: 0, min: 1, max: 3600 }],
+    [{ secondsPerTeam: 3601 }, { code: 'out-of-range', path: at, value: 3601, min: 1, max: 3600 }],
+    [{ secondsPerTeam: 1.5 }, { code: 'wrong-type', path: at, expected: 'integer' }],
+    [{ secondsPerTeam: '240' }, { code: 'wrong-type', path: at, expected: 'integer' }],
+    [240, { code: 'wrong-type', path: ['format', 'prepTime'], expected: 'object' }],
+    ['4 minutes', { code: 'wrong-type', path: ['format', 'prepTime'], expected: 'object' }],
+    [[240], { code: 'wrong-type', path: ['format', 'prepTime'], expected: 'object' }],
+  ])('rejects the prep-time bank %j', (prepTime, issue) => {
+    const raw = rawConfig();
+    raw.format.prepTime = prepTime;
+    expect(issuesOf(raw)).toEqual([issue]);
+  });
+
+  it('reports a broken prep-time bank along with the other problems', () => {
+    const raw = rawConfig();
+    raw.format.prepTime = { secondsPerTeam: -1 };
+    raw.format.steps[1].seconds = 0;
+    expect(issuesOf(raw).map((issue) => issue.path)).toEqual([
+      ['format', 'prepTime', 'secondsPerTeam'],
+      ['format', 'steps', 1, 'seconds'],
+    ]);
+  });
+
+  it('requires the side that asks in a cross-examination, and its seconds', () => {
+    const raw = rawConfig();
+    delete raw.format.steps[4].askingSide;
+    delete raw.format.steps[4].seconds;
+    expect(issuesOf(raw)).toEqual([
+      { code: 'missing-field', path: ['format', 'steps', 4, 'askingSide'] },
+      { code: 'missing-field', path: ['format', 'steps', 4, 'seconds'] },
+    ]);
+  });
+
+  it('rejects an unknown side that asks, or one that is not text', () => {
+    const raw = rawConfig();
+    raw.format.steps[4].askingSide = 'both';
+    expect(issuesOf(raw)).toEqual([
+      { code: 'unknown-side', path: ['format', 'steps', 4, 'askingSide'], side: 'both' },
+    ]);
+    raw.format.steps[4].askingSide = 1;
+    expect(issuesOf(raw)).toEqual([
+      { code: 'wrong-type', path: ['format', 'steps', 4, 'askingSide'], expected: 'string' },
+    ]);
+  });
+
+  it('requires the seconds of audience questions, within the limits of any step', () => {
+    const raw = rawConfig();
+    delete raw.format.steps[5].seconds;
+    expect(issuesOf(raw)).toEqual([
+      { code: 'missing-field', path: ['format', 'steps', 5, 'seconds'] },
+    ]);
+    raw.format.steps[5].seconds = 3601;
+    expect(issuesOf(raw)).toEqual([
+      {
+        code: 'out-of-range',
+        path: ['format', 'steps', 5, 'seconds'],
+        value: 3601,
+        min: 1,
+        max: 3600,
+      },
+    ]);
+  });
+
+  it('allows more than one cross-examination and more than one round of audience questions', () => {
+    const raw = rawConfig();
+    raw.format.steps.push(
+      { id: 'cross-2', type: 'cross-examination', askingSide: 'pro', seconds: 180, label: 'CX' },
+      { id: 'questions-2', type: 'audience-questions', seconds: 60, label: '' },
+    );
+    expect(issuesOf(raw)).toEqual([]);
+  });
+});
+
+describe('parseConfig: the jury and its rubric (#10)', () => {
+  /** A rubric as loose JSON. */
+  function rawRubric(): Record<string, unknown> {
+    return {
+      scale: { min: 1, max: 4 },
+      scope: 'team',
+      criteria: [
+        { id: 'content', label: 'Content', weight: 2, levels: ['Weak', '', 'Good', 'Strong'] },
+        { id: 'delivery', label: 'Delivery' },
+      ],
+    };
+  }
+
+  /** A config with this rubric and a jury step at the end (step 7). */
+  function withJury(rubric: unknown = rawRubric()): RawConfig {
+    const raw = rawConfig();
+    raw.format.rubric = rubric;
+    raw.format.steps.push({ id: 'jury', type: 'jury', label: '' });
+    return raw;
+  }
+
+  const rubricAt = (...path: (string | number)[]) => ['format', 'rubric', ...path];
+
+  it('reads a config without a rubric, as from before #10, unchanged', () => {
+    const raw = rawConfig();
+    expect(configOf(raw)).toStrictEqual(raw);
+    expect(Object.hasOwn(configOf(raw).format, 'rubric')).toBe(false);
+    raw.format.rubric = null;
+    expect(Object.hasOwn(configOf(raw).format, 'rubric')).toBe(false);
+  });
+
+  it('keeps a rubric and a jury step, with a weight of 1 and no levels where none are given', () => {
+    const config = configOf(withJury());
+    expect(config.format.rubric).toStrictEqual({
+      scale: { min: 1, max: 4 },
+      scope: 'team',
+      criteria: [
+        { id: 'content', label: 'Content', weight: 2, levels: ['Weak', '', 'Good', 'Strong'] },
+        { id: 'delivery', label: 'Delivery', weight: 1, levels: [] },
+      ],
+    });
+    expect(config.format.steps.at(-1)).toStrictEqual({ id: 'jury', type: 'jury', label: '' });
+    // What it reads, it reads again the same.
+    expect(configOf(JSON.parse(JSON.stringify(config)))).toStrictEqual(config);
+  });
+
+  it('keeps only the known fields of a rubric, so no scores ride along', () => {
+    const rubric = rawRubric();
+    rubric.scores = { pro: { content: 3 } };
+    (rubric.criteria as Record<string, unknown>[])[0].jurors = ['Mr. Smith'];
+    const raw = withJury(rubric);
+    raw.format.steps[7].scores = { pro: 4 };
+    const config = configOf(raw);
+    expect(JSON.stringify(config)).not.toMatch(/scores|jurors|Smith/);
+  });
+
+  it('allows a rubric without a jury step: it waits for one', () => {
+    const raw = rawConfig();
+    raw.format.rubric = rawRubric();
+    expect(issuesOf(raw)).toEqual([]);
+  });
+
+  it('rejects a jury step without a rubric: there is nothing to score on', () => {
+    const raw = withJury();
+    delete raw.format.rubric;
+    expect(issuesOf(raw)).toEqual([{ code: 'jury-without-rubric', path: ['format', 'steps', 7] }]);
+  });
+
+  it('allows one jury step at most', () => {
+    const raw = withJury();
+    raw.format.steps.unshift({ id: 'jury-2', type: 'jury', label: 'Jury' });
+    expect(issuesOf(raw)).toEqual([
+      { code: 'duplicate-step-type', path: ['format', 'steps', 8, 'type'], stepType: 'jury' },
+    ]);
+  });
+
+  it.each([
+    [
+      { min: 4, max: 1 },
+      { code: 'scale-order', path: rubricAt('scale'), min: 4, max: 1 },
+    ],
+    [
+      { min: 3, max: 3 },
+      { code: 'scale-order', path: rubricAt('scale'), min: 3, max: 3 },
+    ],
+    [
+      { min: -1, max: 4 },
+      { code: 'out-of-range', path: rubricAt('scale', 'min'), value: -1, min: 0, max: 10 },
+    ],
+    [
+      { min: 1, max: 11 },
+      { code: 'out-of-range', path: rubricAt('scale', 'max'), value: 11, min: 0, max: 10 },
+    ],
+    [
+      { min: 1.5, max: 4 },
+      { code: 'wrong-type', path: rubricAt('scale', 'min'), expected: 'integer' },
+    ],
+    [{ min: 1 }, { code: 'missing-field', path: rubricAt('scale', 'max') }],
+    ['1-4', { code: 'wrong-type', path: rubricAt('scale'), expected: 'object' }],
+  ])('rejects the scale %j', (scale, issue) => {
+    expect(issuesOf(withJury({ ...rawRubric(), scale }))).toEqual([issue]);
+  });
+
+  it.each([
+    ['class', { code: 'unknown-scope', path: rubricAt('scope'), scope: 'class' }],
+    [1, { code: 'wrong-type', path: rubricAt('scope'), expected: 'string' }],
+    [undefined, { code: 'missing-field', path: rubricAt('scope') }],
+  ])('rejects the scope %j', (scope, issue) => {
+    expect(issuesOf(withJury({ ...rawRubric(), scope }))).toEqual([issue]);
+  });
+
+  it('rejects a rubric that is not a group of fields', () => {
+    for (const rubric of [[], 'standard', 4]) {
+      expect(issuesOf(withJury(rubric))).toEqual([
+        { code: 'wrong-type', path: ['format', 'rubric'], expected: 'object' },
+      ]);
+    }
+  });
+
+  it('rejects an empty or an overlong list of criteria', () => {
+    expect(issuesOf(withJury({ ...rawRubric(), criteria: [] }))).toEqual([
+      { code: 'too-few', path: rubricAt('criteria'), count: 0, min: 1 },
+    ]);
+    const many = Array.from({ length: 11 }, (_, index) => ({ id: `c${index}`, label: 'C' }));
+    expect(issuesOf(withJury({ ...rawRubric(), criteria: many }))).toEqual([
+      { code: 'too-many', path: rubricAt('criteria'), count: 11, max: 10 },
+    ]);
+  });
+
+  it('rejects a duplicate, an empty or a missing criterion id', () => {
+    const criteria = [
+      { id: 'content', label: 'A' },
+      { id: 'content', label: 'B' },
+      { id: '', label: 'C' },
+      { label: 'D' },
+      { id: '__proto__', label: 'E' },
+    ];
+    expect(issuesOf(withJury({ ...rawRubric(), criteria }))).toEqual([
+      { code: 'invalid-id', path: rubricAt('criteria', 2, 'id') },
+      { code: 'missing-field', path: rubricAt('criteria', 3, 'id') },
+      { code: 'invalid-id', path: rubricAt('criteria', 4, 'id') },
+      { code: 'duplicate-id', path: rubricAt('criteria', 1, 'id'), id: 'content' },
+    ]);
+  });
+
+  it('rejects a blank, a missing or an overlong criterion label', () => {
+    const criteria = [{ id: 'a', label: '  ' }, { id: 'b' }, { id: 'c', label: 'x'.repeat(61) }];
+    expect(issuesOf(withJury({ ...rawRubric(), criteria }))).toEqual([
+      { code: 'empty', path: rubricAt('criteria', 0, 'label') },
+      { code: 'missing-field', path: rubricAt('criteria', 1, 'label') },
+      { code: 'too-long', path: rubricAt('criteria', 2, 'label'), length: 61, max: 60 },
+    ]);
+  });
+
+  it.each([
+    [0, { code: 'out-of-range', value: 0, min: 1, max: 10 }],
+    [-2, { code: 'out-of-range', value: -2, min: 1, max: 10 }],
+    [11, { code: 'out-of-range', value: 11, min: 1, max: 10 }],
+    [1.5, { code: 'wrong-type', expected: 'integer' }],
+    [null, { code: 'wrong-type', expected: 'integer' }],
+    ['2', { code: 'wrong-type', expected: 'integer' }],
+  ])('rejects a weight of %j', (weight, issue) => {
+    const criteria = [{ id: 'content', label: 'Content', weight }];
+    expect(issuesOf(withJury({ ...rawRubric(), criteria }))).toEqual([
+      { ...issue, path: rubricAt('criteria', 0, 'weight') },
+    ]);
+  });
+
+  it('allows a line per level of the scale at most, each a line of text', () => {
+    const criterion = (levels: unknown) => ({
+      ...rawRubric(),
+      criteria: [{ id: 'content', label: 'Content', levels }],
+    });
+    expect(issuesOf(withJury(criterion(['a', 'b', 'c', 'd', 'e'])))).toEqual([
+      { code: 'too-many', path: rubricAt('criteria', 0, 'levels'), count: 5, max: 4 },
+    ]);
+    expect(issuesOf(withJury(criterion(['a', 2, 'x'.repeat(121)])))).toEqual([
+      { code: 'wrong-type', path: rubricAt('criteria', 0, 'levels', 1), expected: 'string' },
+      { code: 'too-long', path: rubricAt('criteria', 0, 'levels', 2), length: 121, max: 120 },
+    ]);
+    expect(issuesOf(withJury(criterion('Weak to strong')))).toEqual([
+      { code: 'wrong-type', path: rubricAt('criteria', 0, 'levels'), expected: 'array' },
+    ]);
+    // Fewer lines than levels: the rest are not described.
+    expect(configOf(withJury(criterion(['Weak']))).format.rubric?.criteria[0].levels).toEqual([
+      'Weak',
+    ]);
+  });
+
+  it('reports every problem of a rubric together', () => {
+    const raw = withJury({
+      scale: { min: 5, max: 2 },
+      scope: 'jury',
+      criteria: [{ id: 'a', label: '', weight: 0 }],
+    });
+    expect(issuesOf(raw).map((issue) => issue.code)).toEqual([
+      'scale-order',
+      'unknown-scope',
+      'empty',
+      'out-of-range',
     ]);
   });
 });

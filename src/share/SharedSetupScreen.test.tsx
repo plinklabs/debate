@@ -2,11 +2,12 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { DebateConfig } from '../model/config';
 import { setSideLabel, setTopicText } from '../model/edit';
-import { GRAFFITI_PRESET } from '../model/presets';
+import { GRAFFITI_PRESET, KARL_POPPER_PRESET, standardRubric } from '../model/presets';
 import { initialState, type AppState } from '../model/reducer';
 import { newDebate } from '../model/session';
 import type { ConfigIssue, ConfigResult } from '../model/validate';
 import { renderWithI18n } from '../test/i18n';
+import { graffitiWithJury } from '../test/playedSession';
 import type { Incoming, IncomingSource } from './incoming';
 import { SharedSetupScreen } from './SharedSetupScreen';
 
@@ -197,6 +198,56 @@ describe('a shared setup', () => {
   });
 });
 
+describe('a shared setup with the steps and prep time of #8', () => {
+  it('shows the prep time of each team, and which side asks in a cross-examination', () => {
+    const popper = KARL_POPPER_PRESET.build('en');
+    const steps = [
+      ...popper.format.steps.slice(0, 2),
+      { id: 'questions', type: 'audience-questions', label: '', seconds: 600 } as const,
+    ];
+    show(ok({ ...popper, format: { ...popper.format, steps } }));
+    const format = screen.getByRole('region', { name: 'Format' });
+    const spec = (term: string) =>
+      within(format).getByText(term, { selector: 'dt' }).nextElementSibling;
+    expect(spec('Prep time')).toHaveTextContent('4 min per team');
+    // 6 + 3 + 10 minutes of steps, and 4 minutes for each team.
+    expect(spec('Total time')).toHaveTextContent('27 minutes');
+    const list = within(format)
+      .getAllByRole('list')
+      .find((candidate) => candidate.tagName === 'OL');
+    expect(
+      within(list!)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual([
+      'ConstructiveSpeech · AFFIRMATIVE · 6 min',
+      'Cross-examinationNEGATIVE asks · 3 min',
+      'Audience questions10 min',
+    ]);
+  });
+
+  it('shows no prep time for a format without a bank', () => {
+    show(ok(english));
+    const format = screen.getByRole('region', { name: 'Format' });
+    expect(within(format).queryByText('Prep time')).not.toBeInTheDocument();
+  });
+
+  it('says where a broken prep-time bank is', () => {
+    show(
+      broken({
+        code: 'out-of-range',
+        path: ['format', 'prepTime', 'secondsPerTeam'],
+        value: 0,
+        min: 1,
+        max: 3600,
+      }),
+    );
+    expect(within(screen.getByRole('alert')).getByRole('listitem')).toHaveTextContent(
+      'Prep time: 0 is not between 1 and 3,600.',
+    );
+  });
+});
+
 describe('a shared setup that cannot be used', () => {
   it('says what is wrong with a link, and where', () => {
     const { onClose } = show(
@@ -272,5 +323,105 @@ describe('a shared setup that cannot be used', () => {
     );
     expect(screen.getByRole('alert')).toHaveTextContent('Dit is te groot voor een opzet.');
     expect(screen.getByRole('button', { name: 'Verder naar de app' })).toBeInTheDocument();
+  });
+});
+
+describe('a shared setup with a jury rubric (#10)', () => {
+  /** The format's lists: the steps, then the rubric's criteria. */
+  const lists = (region = 'Format') =>
+    within(screen.getByRole('region', { name: region }))
+      .getAllByRole('list')
+      .filter((candidate) => candidate.tagName === 'OL')
+      .map((list) =>
+        within(list)
+          .getAllByRole('listitem')
+          .map((item) => item.textContent),
+      );
+
+  it('shows the rubric, its criteria with their weights, and the jury step', () => {
+    const config = graffitiWithJury();
+    const rubric = config.format.rubric;
+    if (rubric === undefined) throw new Error('no rubric');
+    show(
+      ok({
+        ...config,
+        format: {
+          ...config.format,
+          rubric: {
+            ...rubric,
+            criteria: rubric.criteria.map((criterion) =>
+              criterion.id === 'rebuttal' ? { ...criterion, weight: 2 } : criterion,
+            ),
+          },
+        },
+      }),
+    );
+    const format = screen.getByRole('region', { name: 'Format' });
+    expect(
+      within(format).getByText('Jury rubric', { selector: 'dt' }).nextElementSibling,
+    ).toHaveTextContent('4 criteria, 1 to 4, per team');
+    expect(within(format).getByRole('heading', { name: 'Criteria' })).toBeInTheDocument();
+    const [steps, criteria] = lists();
+    expect(steps.at(-1)).toBe('Jury');
+    expect(criteria).toEqual([
+      'Content and arguments',
+      'Rebuttalcounts 2×',
+      'Evidence and examples',
+      'Delivery',
+    ]);
+  });
+
+  it('says when it scores each student, in Dutch', () => {
+    const config = graffitiWithJury('student');
+    show(
+      ok({
+        ...config,
+        format: { ...config.format, rubric: { ...standardRubric('nl'), scope: 'student' } },
+      }),
+      {
+        locale: 'nl',
+      },
+    );
+    const format = screen.getByRole('region', { name: 'Debatvorm' });
+    expect(
+      within(format).getByText('Beoordelingsraster', { selector: 'dt' }).nextElementSibling,
+    ).toHaveTextContent('4 criteria, 1 tot 4, per leerling');
+    expect(lists('Debatvorm')[0].at(-1)).toBe('Juryoordeel');
+  });
+
+  it('shows no rubric for a format without one', () => {
+    show(ok(english));
+    const format = screen.getByRole('region', { name: 'Format' });
+    expect(within(format).queryByText('Jury rubric')).not.toBeInTheDocument();
+    expect(lists()).toHaveLength(1);
+  });
+
+  it('says where a broken rubric is, and a jury step without one', () => {
+    show(
+      broken(
+        { code: 'scale-order', path: ['format', 'rubric', 'scale'], min: 4, max: 1 },
+        {
+          code: 'out-of-range',
+          path: ['format', 'rubric', 'criteria', 2, 'weight'],
+          value: 0,
+          min: 1,
+          max: 10,
+        },
+        { code: 'duplicate-id', path: ['format', 'rubric', 'criteria', 3, 'id'], id: 'content' },
+        { code: 'unknown-scope', path: ['format', 'rubric', 'scope'], scope: 'class' },
+        { code: 'jury-without-rubric', path: ['format', 'steps', 10] },
+      ),
+    );
+    expect(
+      within(screen.getByRole('alert'))
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual([
+      'Jury rubric: The lowest score (4) is not below the highest (1).',
+      'Criterion 3: 0 is not between 1 and 10.',
+      'Criterion 4: The id “content” is used more than once.',
+      'Jury rubric: There is no way of scoring called “class”: a rubric scores per “team” or per “student”.',
+      'Step 11: A “Jury” step needs a rubric to score on: add one, or remove the step.',
+    ]);
   });
 });

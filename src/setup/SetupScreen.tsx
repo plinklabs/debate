@@ -19,15 +19,28 @@ interface Props {
   readonly onTabChange: (tab: SetupTab) => void;
   /** A debate whose Start button gets the focus: the one the teacher just left. */
   readonly focusDebate: string | null;
+  /** The debate the teacher just finished, if any. */
+  readonly finishedDebate: string | null;
   /** A setup file the teacher opened under Share, to show before it is used. */
   readonly onOpenFile: (file: File) => void;
+  /** A report file the teacher opened under the debates, to show before it is loaded. */
+  readonly onOpenReport: (file: File) => void;
 }
 
 /**
  * Everything before the debate: topics, the format, the debates with their
  * teams, and the setup shared as a link or a file.
  */
-export function SetupScreen({ state, dispatch, tab, onTabChange, focusDebate, onOpenFile }: Props) {
+export function SetupScreen({
+  state,
+  dispatch,
+  tab,
+  onTabChange,
+  focusDebate,
+  finishedDebate,
+  onOpenFile,
+  onOpenReport,
+}: Props) {
   const { t } = useI18n();
   const prefix = useId();
   const editor = useConfigEditor(state.config, dispatch);
@@ -61,7 +74,13 @@ export function SetupScreen({ state, dispatch, tab, onTabChange, focusDebate, on
         {tab === 'topics' && <TopicsPanel editor={editor} session={state.session} />}
         {tab === 'format' && <FormatPanel editor={editor} session={state.session} />}
         {tab === 'debates' && (
-          <DebatesPanel state={state} dispatch={dispatch} focusDebate={focusDebate} />
+          <DebatesPanel
+            state={state}
+            dispatch={dispatch}
+            focusDebate={focusDebate}
+            finishedDebate={finishedDebate}
+            onOpenReport={onOpenReport}
+          />
         )}
         {tab === 'share' && <SharePanel config={state.config} onOpenFile={onOpenFile} />}
       </TabPanel>

@@ -1,24 +1,43 @@
 import { useId, useState } from 'react';
 import { Button } from '../components/ui/Button';
+import { Checkbox } from '../components/ui/Checkbox';
 import { Field, Select } from '../components/ui/Field';
 import { InlineConfirm } from '../components/ui/InlineConfirm';
 import { useFocusAfterRender } from '../components/ui/useFocusAfterRender';
 import { useI18n } from '../i18n';
 import {
   LIMITS,
+  RUBRIC_SCOPES,
   SIDES,
   STEP_TYPES,
   formatTotalSeconds,
   isStepType,
+  rubricMaxTotal,
+  scaleLevels,
   stepSeconds,
+  stepSide,
+  type RubricCriterion,
+  type RubricScale,
   type Step,
   type TeamSize,
 } from '../model/config';
 import {
+  NEW_PREP_SECONDS,
+  addCriterion,
   addStep,
+  customRubric,
+  moveCriterion,
   moveStep,
+  removeCriterion,
   removeStep,
+  setCriterionLabel,
+  setCriterionLevel,
+  setCriterionWeight,
   setFormat,
+  setPrepTime,
+  setRubric,
+  setRubricScale,
+  setRubricScope,
   setSideLabel,
   setStepLabel,
   setStepSeconds,
@@ -26,14 +45,15 @@ import {
   setStepType,
   setTeamSize,
 } from '../model/edit';
-import { DEFAULT_PRESET, PRESETS, findPreset } from '../model/presets';
-import { hasResults, recordedStepIds, type Session } from '../model/session';
+import { DEFAULT_PRESET, PRESETS, findPreset, standardRubric } from '../model/presets';
+import { hasResults, recordedStepIds, scoredCriterionIds, type Session } from '../model/session';
 import { toInteger, type ConfigEditor } from './configEditor';
 import { DraftField } from './DraftField';
 import { ItemActions, actionIds } from './ItemActions';
 import styles from './setup.module.css';
 
 const BOUNDS: readonly (keyof TeamSize)[] = ['min', 'max'];
+const SCALE_BOUNDS: readonly (keyof RubricScale)[] = ['min', 'max'];
 
 interface Props {
   readonly editor: ConfigEditor;
@@ -41,9 +61,10 @@ interface Props {
 }
 
 /**
- * The format: a preset to start from, the side labels, the team size and the
- * steps. When a debate already has results, the editor stays shut until the
- * teacher confirms they want to change it anyway.
+ * The format: a preset to start from, the side labels, the team size, the
+ * prep-time bank, the steps and the jury's rubric. When a debate already has
+ * results, the editor stays shut until the teacher confirms they want to
+ * change it anyway.
  */
 export function FormatPanel({ editor, session }: Props) {
   const { t, formatDuration, formatNumber } = useI18n();
@@ -126,6 +147,8 @@ export function FormatPanel({ editor, session }: Props) {
           </div>
         </fieldset>
 
+        <PrepTimeGroup editor={editor} idPrefix={prefix} />
+
         <div className={styles.group}>
           <h3 className={styles.groupTitle}>{t('format.steps')}</h3>
           <ol className={styles.list}>
@@ -146,6 +169,13 @@ export function FormatPanel({ editor, session }: Props) {
             </Button>
           </div>
         </div>
+
+        <RubricGroup
+          editor={editor}
+          session={session}
+          idPrefix={prefix}
+          onFocusLater={focusLater}
+        />
       </fieldset>
     </section>
   );
@@ -183,6 +213,53 @@ function PresetPicker({ editor, idPrefix }: PresetPickerProps) {
   );
 }
 
+interface PrepTimeGroupProps {
+  readonly editor: ConfigEditor;
+  readonly idPrefix: string;
+}
+
+/**
+ * The prep-time bank (#8): on or off, and how much each team gets. Switched
+ * on, it starts at `NEW_PREP_SECONDS`.
+ */
+function PrepTimeGroup({ editor, idPrefix }: PrepTimeGroupProps) {
+  const { t, formatDuration } = useI18n();
+  const { config } = editor;
+  const { prepTime } = config.format;
+  const id = `${idPrefix}-prep`;
+  return (
+    <fieldset className={styles.group} aria-describedby={`${id}-about`}>
+      <legend className={styles.groupTitle}>{t('format.prepTime')}</legend>
+      <p id={`${id}-about`} className={styles.groupIntro}>
+        {t('format.prepTime.hint')}
+      </p>
+      <div className={styles.prepRow}>
+        <Checkbox
+          id={`${id}-on`}
+          label={t('format.prepTime.on')}
+          checked={prepTime !== undefined}
+          onChange={(event) =>
+            editor.apply(setPrepTime(config, event.target.checked ? NEW_PREP_SECONDS : null))
+          }
+        />
+        {prepTime !== undefined && (
+          <DraftField
+            id={`${id}-seconds`}
+            kind="number"
+            label={t('format.step.secondsPerTeam')}
+            value={String(prepTime.secondsPerTeam)}
+            min={LIMITS.prepSeconds.min}
+            max={LIMITS.prepSeconds.max}
+            hint={formatDuration(prepTime.secondsPerTeam)}
+            className={styles.prepSeconds}
+            apply={(raw) => editor.apply(setPrepTime(config, toInteger(raw)))}
+          />
+        )}
+      </div>
+    </fieldset>
+  );
+}
+
 interface StepItemProps {
   readonly step: Step;
   readonly index: number;
@@ -198,6 +275,8 @@ function StepItem({ step, index, editor, idPrefix, onFocusLater }: StepItemProps
   const number = index + 1;
   const base = `${idPrefix}-${step.id}`;
   const seconds = stepSeconds(step);
+  // A speech has a side, and a cross-examination the side that asks.
+  const side = step.type === 'speech' || step.type === 'cross-examination' ? stepSide(step) : null;
   // A step without a label of its own goes by the name of its kind.
   const typeName = t(`stepType.${step.type}`);
 
@@ -221,7 +300,8 @@ function StepItem({ step, index, editor, idPrefix, onFocusLater }: StepItemProps
                 <option
                   key={type}
                   value={type}
-                  // At most one vote before and one vote after, in that order.
+                  // At most one vote before and one vote after, in that order;
+                  // at most one jury, and only with a rubric.
                   disabled={
                     type !== step.type && !editor.allows(setStepType(config, step.id, type))
                   }
@@ -241,19 +321,27 @@ function StepItem({ step, index, editor, idPrefix, onFocusLater }: StepItemProps
             apply={(raw) => editor.apply(setStepLabel(config, step.id, raw))}
           />
 
-          {step.type === 'speech' && (
-            <Field id={`${base}-side`} label={t('format.step.side')} className={styles.cellSide}>
+          {side !== null && (
+            <Field
+              id={`${base}-side`}
+              label={
+                step.type === 'cross-examination'
+                  ? t('format.step.askingSide')
+                  : t('format.step.side')
+              }
+              className={styles.cellSide}
+            >
               <Select
                 id={`${base}-side`}
-                value={step.side}
+                value={side}
                 onChange={(event) => {
-                  const side = SIDES.find((candidate) => candidate === event.target.value);
-                  if (side !== undefined) editor.apply(setStepSide(config, step.id, side));
+                  const picked = SIDES.find((candidate) => candidate === event.target.value);
+                  if (picked !== undefined) editor.apply(setStepSide(config, step.id, picked));
                 }}
               >
-                {SIDES.map((side) => (
-                  <option key={side} value={side}>
-                    {sides[side]}
+                {SIDES.map((option) => (
+                  <option key={option} value={option}>
+                    {sides[option]}
                   </option>
                 ))}
               </Select>
@@ -261,7 +349,9 @@ function StepItem({ step, index, editor, idPrefix, onFocusLater }: StepItemProps
           )}
 
           {seconds === null ? (
-            <p className={styles.stepNote}>{t('format.step.vote')}</p>
+            <p className={styles.stepNote}>
+              {step.type === 'jury' ? t('format.step.jury') : t('format.step.vote')}
+            </p>
           ) : (
             <DraftField
               // A field of its own per kind: a half-typed duration does not carry over.
@@ -301,6 +391,231 @@ function StepItem({ step, index, editor, idPrefix, onFocusLater }: StepItemProps
           const next = steps[index + 1] ?? steps[index - 1];
           onFocusLater(actionIds(`${idPrefix}-${next.id}`).remove);
           editor.apply(removeStep(config, step.id));
+        }}
+      />
+    </li>
+  );
+}
+
+interface RubricGroupProps {
+  readonly editor: ConfigEditor;
+  readonly session: Session;
+  readonly idPrefix: string;
+  readonly onFocusLater: (id: string) => void;
+}
+
+/**
+ * The jury's rubric (#10): none, the standard rubric or one of the teacher's
+ * own; its scale, who it scores, and its criteria with their weights and what
+ * each score means. It cannot go while a jury step scores on it.
+ */
+function RubricGroup({ editor, session, idPrefix, onFocusLater }: RubricGroupProps) {
+  const { t, locale } = useI18n();
+  const { config } = editor;
+  const { rubric, steps } = config.format;
+  const id = `${idPrefix}-rubric`;
+  const reserved = scoredCriterionIds(session);
+
+  if (rubric === undefined) {
+    return (
+      <fieldset className={styles.group} aria-describedby={`${id}-about`}>
+        <legend className={styles.groupTitle}>{t('format.rubric')}</legend>
+        <p id={`${id}-about`} className={styles.groupIntro}>
+          {t('format.rubric.hint')}
+        </p>
+        <div className={styles.rubricStart}>
+          <Button
+            id={`${id}-standard`}
+            onClick={() => {
+              onFocusLater(`${id}-scale-min`);
+              editor.apply(setRubric(config, standardRubric(locale)));
+            }}
+          >
+            {t('format.rubric.addStandard')}
+          </Button>
+          <Button
+            onClick={() => {
+              onFocusLater(`${id}-scale-min`);
+              editor.apply(
+                setRubric(config, customRubric(t('format.rubric.newCriterion'), reserved)),
+              );
+            }}
+          >
+            {t('format.rubric.addCustom')}
+          </Button>
+        </div>
+      </fieldset>
+    );
+  }
+
+  const add = () => {
+    const before = new Set(rubric.criteria.map((criterion) => criterion.id));
+    const added = addCriterion(config, t('format.rubric.newCriterion'), reserved);
+    const criterion = added.format.rubric?.criteria.find((item) => !before.has(item.id));
+    if (criterion !== undefined) onFocusLater(`${id}-${criterion.id}-label`);
+    editor.apply(added);
+  };
+  const removable = editor.allows(setRubric(config, null));
+  const scoredOn = steps.some((step) => step.type === 'jury');
+
+  return (
+    <fieldset className={styles.group} aria-describedby={`${id}-about`}>
+      <legend className={styles.groupTitle}>{t('format.rubric')}</legend>
+      <p id={`${id}-about`} className={styles.groupIntro}>
+        {t('format.rubric.hint')}
+      </p>
+      <div className={styles.rubricSettings}>
+        {SCALE_BOUNDS.map((bound) => (
+          <DraftField
+            key={bound}
+            id={`${id}-scale-${bound}`}
+            kind="number"
+            label={t(`format.rubric.scale.${bound}`)}
+            value={String(rubric.scale[bound])}
+            min={LIMITS.rubricScale.min}
+            max={LIMITS.rubricScale.max}
+            apply={(raw) => editor.apply(setRubricScale(config, bound, toInteger(raw)))}
+          />
+        ))}
+        <Field id={`${id}-scope`} label={t('format.rubric.scope')}>
+          <Select
+            id={`${id}-scope`}
+            value={rubric.scope}
+            onChange={(event) => {
+              const scope = RUBRIC_SCOPES.find((candidate) => candidate === event.target.value);
+              if (scope !== undefined) editor.apply(setRubricScope(config, scope));
+            }}
+          >
+            {RUBRIC_SCOPES.map((scope) => (
+              <option key={scope} value={scope}>
+                {t(`format.rubric.scope.${scope}`)}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+      <p className={styles.rubricTotal}>
+        {t('format.rubric.maxTotal', { max: rubricMaxTotal(rubric) })}
+      </p>
+
+      <h4 className={styles.subTitle}>{t('format.rubric.criteria')}</h4>
+      <ol className={styles.list}>
+        {rubric.criteria.map((criterion, index) => (
+          <CriterionItem
+            key={criterion.id}
+            criterion={criterion}
+            index={index}
+            editor={editor}
+            idPrefix={id}
+            onFocusLater={onFocusLater}
+          />
+        ))}
+      </ol>
+      <div className={styles.addRow}>
+        <Button
+          onClick={add}
+          disabled={!editor.allows(addCriterion(config, t('format.rubric.newCriterion')))}
+        >
+          {t('format.rubric.addCriterion')}
+        </Button>
+        {removable && (
+          <InlineConfirm
+            trigger={t('format.rubric.remove')}
+            variant="ghost"
+            question={t('format.rubric.remove.question')}
+            confirm={t('format.rubric.remove')}
+            onConfirm={() => {
+              onFocusLater(`${id}-standard`);
+              editor.apply(setRubric(config, null));
+            }}
+          />
+        )}
+      </div>
+      <p className={styles.rubricNote}>
+        {scoredOn ? t('format.rubric.removeBlocked') : t('format.rubric.noJuryStep')}
+      </p>
+    </fieldset>
+  );
+}
+
+interface CriterionItemProps {
+  readonly criterion: RubricCriterion;
+  readonly index: number;
+  readonly editor: ConfigEditor;
+  /** The rubric's id prefix. */
+  readonly idPrefix: string;
+  readonly onFocusLater: (id: string) => void;
+}
+
+/** A criterion: its name, its weight and, folded away, what each score on it means. */
+function CriterionItem({ criterion, index, editor, idPrefix, onFocusLater }: CriterionItemProps) {
+  const { t } = useI18n();
+  const { config } = editor;
+  const { rubric } = config.format;
+  if (rubric === undefined) return null;
+  const { criteria, scale } = rubric;
+  const number = index + 1;
+  const base = `${idPrefix}-${criterion.id}`;
+  const levels = Array.from({ length: scaleLevels(scale) }, (_, at) => scale.min + at);
+
+  return (
+    <li className={styles.item}>
+      <div role="group" aria-labelledby={`${base}-name`} className={styles.itemMain}>
+        <p id={`${base}-name`} className={styles.itemNumber}>
+          {t('format.rubric.criterion', { number })}
+        </p>
+        <div className={styles.criterionFields}>
+          <DraftField
+            id={`${base}-label`}
+            label={t('format.rubric.criterion.label')}
+            value={criterion.label}
+            maxLength={LIMITS.criterionLabelLength}
+            apply={(raw) => editor.apply(setCriterionLabel(config, criterion.id, raw))}
+          />
+          <DraftField
+            id={`${base}-weight`}
+            kind="number"
+            label={t('format.rubric.criterion.weight')}
+            value={String(criterion.weight)}
+            min={LIMITS.criterionWeight.min}
+            max={LIMITS.criterionWeight.max}
+            apply={(raw) => editor.apply(setCriterionWeight(config, criterion.id, toInteger(raw)))}
+          />
+        </div>
+        <details className={styles.levelsBox}>
+          <summary className={styles.levelsSummary}>{t('format.rubric.criterion.levels')}</summary>
+          <div className={styles.levelFields}>
+            {levels.map((level) => (
+              <DraftField
+                key={level}
+                id={`${base}-level-${level}`}
+                label={t('format.rubric.level', { level })}
+                value={criterion.levels[level - scale.min] ?? ''}
+                maxLength={LIMITS.levelLength}
+                apply={(raw) => editor.apply(setCriterionLevel(config, criterion.id, level, raw))}
+              />
+            ))}
+          </div>
+        </details>
+      </div>
+      <ItemActions
+        base={base}
+        labels={{
+          up: t('format.rubric.criterion.moveUp', { number }),
+          down: t('format.rubric.criterion.moveDown', { number }),
+          remove: t('format.rubric.criterion.remove', { number }),
+        }}
+        canMoveUp={editor.allows(moveCriterion(config, criterion.id, -1))}
+        canMoveDown={editor.allows(moveCriterion(config, criterion.id, 1))}
+        canRemove={editor.allows(removeCriterion(config, criterion.id))}
+        onMove={(offset) => {
+          onFocusLater(actionIds(base)[offset < 0 ? 'up' : 'down']);
+          editor.apply(moveCriterion(config, criterion.id, offset));
+        }}
+        onRemove={() => {
+          const next = criteria[index + 1] ?? criteria[index - 1];
+          onFocusLater(actionIds(`${idPrefix}-${next.id}`).remove);
+          editor.apply(removeCriterion(config, criterion.id));
         }}
       />
     </li>
