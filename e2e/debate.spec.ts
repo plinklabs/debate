@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { expectFits } from './helpers';
 
 // The debate screen end to end: a whole graffiti debate run in front of the
@@ -100,6 +100,54 @@ const moving = (page: Page) =>
  */
 async function pass(page: Page, ms: number) {
   for (let left = ms; left > 0; left -= 1000) await page.clock.runFor(Math.min(1000, left));
+}
+
+/**
+ * A long stretch at once, as if the laptop lid had been closed, then a last
+ * second on the wall, so the page draws its clocks at the end of it.
+ */
+async function jump(page: Page, ms: number) {
+  await page.clock.fastForward(ms - 1000);
+  await page.clock.runFor(1000);
+}
+
+/**
+ * The step's clock showing `time`, wholly inside its column: the digits never
+ * wrap, so a time too long for the column would run out of its box (over who
+ * has the floor and the names beside it) rather than widen it. The text itself
+ * is measured, with a Range over the digits. Returns the size of the digits,
+ * and how much of the column they fill.
+ */
+async function expectClockFits(page: Page, time: string, beside: readonly Locator[]) {
+  await expect(page.getByRole('timer', { name: 'Time' })).toHaveText(time);
+  const { text, column, overflow, fontSize } = await page
+    .getByRole('timer', { name: 'Time' })
+    .evaluate((digits) => {
+      const range = document.createRange();
+      range.selectNodeContents(digits);
+      const { left, right, top, bottom } = range.getBoundingClientRect();
+      const box = digits.parentElement!.getBoundingClientRect();
+      return {
+        text: { left, right, top, bottom },
+        column: { left: box.left, right: box.right },
+        overflow: digits.scrollWidth - digits.clientWidth,
+        fontSize: parseFloat(getComputedStyle(digits).fontSize),
+      };
+    });
+  expect(overflow, `${time} overflows its box`).toBe(0);
+  expect(text.left, `${time} starts in its column`).toBeGreaterThanOrEqual(column.left - 0.5);
+  expect(text.right, `${time} ends in its column`).toBeLessThanOrEqual(column.right + 0.5);
+  for (const other of beside) {
+    const box = (await other.boundingBox())!;
+    const apart =
+      text.right <= box.x ||
+      box.x + box.width <= text.left ||
+      text.bottom <= box.y ||
+      box.y + box.height <= text.top;
+    expect(apart, `${time} clear of “${await other.textContent()}”`).toBe(true);
+  }
+  await expectFits(page);
+  return { fontSize, fill: (text.right - text.left) / (column.right - column.left) };
 }
 
 test.describe('in an English browser', () => {
@@ -309,5 +357,66 @@ test.describe('in an English browser', () => {
     await expect(page.getByRole('status')).toHaveText('Time is up.');
     await expect(page.getByText('Overtime · of 1:00')).toBeVisible();
     expect(await moving(page)).toBe(0);
+  });
+
+  test('keeps the clock inside its column, however long the time it shows (#15)', async ({
+    page,
+  }, testInfo) => {
+    const projector = testInfo.project.name === 'desktop';
+    await page.clock.install({ time: START });
+    await page.goto('./');
+    await page.clock.pauseAt(new Date(START.getTime() + 5000));
+    // The opening against takes a quarter of an hour.
+    await page.getByRole('tab', { name: 'Format', exact: true }).click();
+    await page
+      .getByRole('group', { name: 'Step 3', exact: true })
+      .getByRole('spinbutton', { name: 'Seconds' })
+      .fill('900');
+    await startDebate(page);
+    const steps = page.getByRole('navigation', { name: 'Steps' });
+
+    // ── A minute planned, ten minutes over: six characters ──
+    await steps.getByRole('button', { name: 'Step 2: Opening (FOR)' }).click();
+    await button(page, 'Ann').click();
+    const forFloor = [
+      page.getByText('Ann has the floor'),
+      ...['Ann', 'Bert'].map((name) => button(page, name)),
+    ];
+    await expectClockFits(page, '1:00', forFloor);
+    await jump(page, 659_000);
+    await expectClockFits(page, '+9:59', forFloor);
+    await pass(page, 1_000);
+    const tenOver = await expectClockFits(page, '+10:00', forFloor);
+    if (projector) {
+      // Still as large as the column allows, to be read from the back of the room.
+      expect(tenOver.fill).toBeGreaterThan(0.9);
+      expect(tenOver.fontSize).toBeGreaterThan(120);
+    }
+    // The clock does not change size from one second to the next.
+    await pass(page, 1_000);
+    expect((await expectClockFits(page, '+10:01', forFloor)).fontSize).toBe(tenOver.fontSize);
+
+    // ── A quarter of an hour planned: five characters, then six and seven ──
+    await steps.getByRole('button', { name: 'Step 3: Opening (AGAINST)' }).click();
+    await button(page, 'Dirk').click();
+    const againstFloor = [
+      page.getByText('Dirk has the floor'),
+      ...['Dirk', 'Eva'].map((name) => button(page, name)),
+    ];
+    const quarter = await expectClockFits(page, '15:00', againstFloor);
+    if (projector) expect(quarter.fill).toBeGreaterThan(0.9);
+    // Nor when it comes down under ten minutes, or reaches the overtime.
+    await jump(page, 301_000);
+    expect((await expectClockFits(page, '9:59', againstFloor)).fontSize).toBe(quarter.fontSize);
+    await jump(page, 600_000);
+    expect((await expectClockFits(page, '+0:01', againstFloor)).fontSize).toBe(quarter.fontSize);
+    await jump(page, 599_000);
+    const quarterOver = await expectClockFits(page, '+10:00', againstFloor);
+    await jump(page, 5_400_000);
+    const hundredOver = await expectClockFits(page, '+100:00', againstFloor);
+    if (projector) {
+      expect(quarterOver.fill).toBeGreaterThan(0.9);
+      expect(hundredOver.fill).toBeGreaterThan(0.9);
+    }
   });
 });

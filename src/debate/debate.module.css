@@ -184,13 +184,22 @@
   margin: 0;
   font-family: var(--font-mono);
   font-weight: var(--label-weight-strong);
+  font-variant-numeric: tabular-nums;
   line-height: 0.95;
   letter-spacing: -0.04em;
   white-space: nowrap;
 }
 
+/* The clock of a step: as large as the screen allows, but never wider than its
+   column, however many characters it shows (`--chars`, set by Countdown.tsx:
+   `+10:00` takes six). A character of Space Mono is 0.612em wide, 0.572em
+   with the tracking; 0.58em leaves a little for rounding. */
+.large {
+  container-type: inline-size;
+}
+
 .large .digits {
-  font-size: clamp(4.5rem, min(19vw, 27vh), 15rem);
+  font-size: min(clamp(4.5rem, min(19vw, 27vh), 15rem), 100cqi / (var(--chars, 4) * 0.58));
 }
 
 .medium .digits {

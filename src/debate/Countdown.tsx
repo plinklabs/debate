@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { Ping } from '../components/ui/Ping';
 import { useI18n } from '../i18n';
 import type { StepClock } from '../model/session';
@@ -29,9 +30,13 @@ export function Countdown({ clock, now, label, size = 'large' }: Props) {
     : !running && elapsed > 0
       ? t('debate.paused')
       : null;
-  const note = [state, t('debate.of', { time: formatClock(clock.seconds) })]
-    .filter(Boolean)
-    .join(' · ');
+  const planned = formatClock(clock.seconds);
+  const note = [state, t('debate.of', { time: planned })].filter(Boolean).join(' · ');
+  const digits = formatCountdown(shown);
+  // The characters the digits are sized for, so that they fit their column
+  // (debate.module.css): those of the time shown, or of the time planned if
+  // that is longer, so a quarter of an hour keeps its size below 10:00.
+  const chars = Math.max(digits.length, planned.length);
 
   return (
     <div
@@ -39,8 +44,13 @@ export function Countdown({ clock, now, label, size = 'large' }: Props) {
         .filter(Boolean)
         .join(' ')}
     >
-      <p role="timer" aria-label={label} className={styles.digits}>
-        {formatCountdown(shown)}
+      <p
+        role="timer"
+        aria-label={label}
+        className={styles.digits}
+        style={{ '--chars': chars } as CSSProperties}
+      >
+        {digits}
       </p>
       <p className={styles.clockNote}>
         <span>{note}</span>
