@@ -6,6 +6,27 @@ names never leave the device.
 
 **Live:** https://plinklabs.org/debate/
 
+## Offline use and updates
+
+After one visit, the app works without a network: a service worker keeps every file of
+the app in the browser, so it loads, runs a whole debate and makes its report offline.
+It can also be installed as an app (Chrome: _Install_ in the address bar). Nothing is
+fetched from other sites.
+
+A new version, once deployed, is downloaded in the background the next time the app is
+opened, or within the hour on a page left open. The app then shows _A new version is
+ready_ with a **Reload** button. It never reloads by itself, so a debate is never
+interrupted; after the reload, debates in progress are kept, with their clocks paused.
+
+How it is built: `src/sw/worker.ts` is the worker (type-checked with `tsconfig.sw.json`,
+as it runs in a worker, not a window). The Vite plugin in `tools/serviceWorker.ts` turns
+it into `dist/sw.js` with the list of the build's files in front of it, so every deploy
+that changes a file is a new version. The page registers it, in production builds only,
+with the scope `/debate/` (`src/offline/register.ts`); the rest of `plinklabs.org` is
+another site, and the worker touches neither its paths nor its caches. The web app
+manifest and the icons are in `public/`; the PNG icons are the Plink mark
+(`public/plink-mark.svg`) on paper, rendered once with Playwright.
+
 ## Development
 
 Requires Node 22 (22.13 or later).
@@ -32,7 +53,7 @@ Every change must pass these. CI runs them in this order:
 | ---------------------- | --------------------------------------------------------------------------- |
 | `npm run format:check` | Prettier formatting (`npm run format` fixes it)                             |
 | `npm run lint`         | oxlint: correctness, TypeScript, React and react-hooks rules; warnings fail |
-| `npm run typecheck`    | `tsc` over the app and over the Playwright config and tests                 |
+| `npm run typecheck`    | `tsc` over the app, the service worker, and the Playwright config and tests |
 | `npm test`             | Unit and component tests (Vitest, jsdom, React Testing Library)             |
 | `npm run build`        | Type-check and production build to `dist/`                                  |
 | `npm run e2e`          | End-to-end tests (Playwright, Chromium, desktop and phone size)             |
@@ -49,8 +70,12 @@ Every change must pass these. CI runs them in this order:
   the `playwright-report` artifact; locally, open it with `npx playwright show-report`.
   Checks shared by the specs live in `e2e/helpers.ts` (not a spec, so Playwright doesn't
   run it): `expectFits(page)` fails on sideways scrolling or rendered text under 16px.
-- **Config:** `.prettierrc.json`, `.oxlintrc.json`, `tsconfig.json` (app) and
-  `tsconfig.node.json` (Playwright), `vite.config.ts` (Vitest), `playwright.config.ts`.
+  The build registers its service worker, so after the first load a page is served from
+  the worker's cache, which `page.route()` does not see; each test has a fresh browser
+  context, so nothing is cached from one test to the next.
+- **Config:** `.prettierrc.json`, `.oxlintrc.json`, `tsconfig.json` (app),
+  `tsconfig.node.json` (Playwright) and `tsconfig.sw.json` (service worker),
+  `vite.config.ts` (build and Vitest), `playwright.config.ts`.
 - The linter is oxlint rather than ESLint because typescript-eslint needs the TypeScript
   compiler API, which the native TypeScript 7 compiler does not provide.
 - The vendored tokens in `src/styles/plink/` are left out of formatting and linting.

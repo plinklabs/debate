@@ -86,6 +86,9 @@ export const nl: Dictionary = {
   'action.cancel': 'Annuleren',
   'action.remove': 'Verwijderen',
 
+  'update.ready': 'Er staat een nieuwe versie klaar.',
+  'update.reload': 'Herladen',
+
   'setup.eyebrow': '// Opzet',
   'setup.lede':
     'Stellingen, teams, spreektijden en een stemming van het publiek, om een debat in de klas te houden. Alles blijft in je browser.',

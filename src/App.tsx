@@ -7,6 +7,7 @@ import type { Locale } from './model/locale';
 import { defaultConfig } from './model/presets';
 import { anyRunning, currentDebate, reducer, type AppState } from './model/reducer';
 import { loadState, saveState } from './model/storage';
+import { UpdateNotice } from './offline/UpdateNotice';
 import { ReportPreviewScreen } from './report/ReportPreviewScreen';
 import { useConfigEditor } from './setup/configEditor';
 import { SetupScreen, type SetupTab } from './setup/SetupScreen';
@@ -26,7 +27,8 @@ function startState(locale: Locale): AppState {
  * screen, so a reload comes back to it. The URL hash is not used for this; it
  * carries a shared setup (`#c=…`, #5). That, a setup file, or a report file
  * opened to go on with its debates (#7), is shown before anything else until
- * the teacher uses it or not.
+ * the teacher uses it or not. Under the header, a notice offers a new version
+ * once one is ready (#9).
  */
 export function App() {
   const { locale } = useI18n();
@@ -112,6 +114,7 @@ export function App() {
   return (
     <>
       <AppHeader />
+      <UpdateNotice />
       {incoming !== null ? (
         isReport(incoming) ? (
           <ReportPreviewScreen

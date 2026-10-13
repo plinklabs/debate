@@ -91,6 +91,10 @@ export const en = {
   'action.cancel': 'Cancel',
   'action.remove': 'Remove',
 
+  // A new version of the app, installed in the background after a deploy (#9).
+  'update.ready': 'A new version is ready.',
+  'update.reload': 'Reload',
+
   // The setup screen: three areas, shown one at a time as tabs.
   'setup.eyebrow': '// Setup',
   'setup.lede':
