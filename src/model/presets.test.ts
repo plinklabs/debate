@@ -10,6 +10,7 @@ import {
   PUBLIC_DEBATE_PRESET,
   defaultConfig,
   findPreset,
+  standardRubric,
 } from './presets';
 import { parseConfig } from './validate';
 
@@ -228,5 +229,70 @@ describe.each(PRESETS.map((preset) => [preset.id, preset] as const))('preset %s'
   it('differs between locales in its labels only', () => {
     const [first, ...others] = LOCALES.map((locale) => withoutLabels(preset.build(locale)));
     for (const other of others) expect(other).toEqual(first);
+  });
+});
+
+describe('the standard rubric (#10)', () => {
+  it.each(LOCALES)(
+    'scores the teams on four criteria from 1 to 4, counting the same, in %s',
+    (locale) => {
+      const rubric = standardRubric(locale);
+      expect(rubric.scale).toEqual({ min: 1, max: 4 });
+      expect(rubric.scope).toBe('team');
+      expect(rubric.criteria.map((criterion) => criterion.id)).toEqual([
+        'content',
+        'rebuttal',
+        'evidence',
+        'delivery',
+      ]);
+      for (const criterion of rubric.criteria) {
+        expect(criterion.weight).toBe(1);
+        // A short line for every level.
+        expect(criterion.levels).toHaveLength(4);
+        for (const line of criterion.levels) expect(line).toMatch(/^\S.{9,119}$/);
+      }
+      // It is a valid rubric for any preset, with a jury step to score on it.
+      const config = GRAFFITI_PRESET.build(locale);
+      const withJury: DebateConfig = {
+        ...config,
+        format: {
+          ...config.format,
+          rubric,
+          steps: [...config.format.steps, { id: 'jury', type: 'jury', label: '' }],
+        },
+      };
+      expect(parseConfig(withJury)).toEqual({ ok: true, config: withJury });
+    },
+  );
+
+  it('has its labels and levels in each language, and the rest the same', () => {
+    const [en, nl] = LOCALES.map(standardRubric);
+    expect(en.criteria.map((criterion) => criterion.label)).toEqual([
+      'Content and arguments',
+      'Rebuttal',
+      'Evidence and examples',
+      'Delivery',
+    ]);
+    expect(nl.criteria.map((criterion) => criterion.label)).toEqual([
+      'Inhoud en argumenten',
+      'Weerlegging',
+      'Bewijs en voorbeelden',
+      'Presentatie',
+    ]);
+    const shape = (rubric: typeof en) => ({
+      ...rubric,
+      criteria: rubric.criteria.map(({ id, weight }) => ({ id, weight })),
+    });
+    expect(shape(nl)).toEqual(shape(en));
+    en.criteria.forEach((criterion, index) => {
+      for (const [level, line] of criterion.levels.entries()) {
+        expect(nl.criteria[index].levels[level]).not.toBe(line);
+      }
+    });
+  });
+
+  it('is a fresh rubric each time, so editing one leaves the next alone', () => {
+    expect(standardRubric('en')).not.toBe(standardRubric('en'));
+    expect(standardRubric('en').criteria[0]).not.toBe(standardRubric('en').criteria[0]);
   });
 });

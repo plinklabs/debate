@@ -2,9 +2,10 @@
 // language: its side and step labels exist in every locale, while ids, types,
 // durations and topics are the same in each, so a session made with one
 // language keeps working after a switch to the other. Presets are starting
-// points: every duration stays editable.
+// points: every duration stays editable. The standard rubric of the jury (#10)
+// is built the same way.
 
-import { CONFIG_VERSION, type DebateConfig, type Side, type Topic } from './config';
+import { CONFIG_VERSION, type DebateConfig, type Rubric, type Side, type Topic } from './config';
 import type { Locale, Localized } from './locale';
 
 export interface Preset {
@@ -213,6 +214,113 @@ export const PUBLIC_DEBATE_PRESET: Preset = {
     };
   },
 };
+
+// ---------------------------------------------------------------------------
+// The standard rubric (#10), for a teacher who does not want to design one:
+// four criteria that most debate rubrics share, each on a scale of 1 to 4
+// with a line per level, counting the same, and a score per team.
+// ---------------------------------------------------------------------------
+
+interface CriterionText {
+  readonly label: Localized;
+  /** What 1, 2, 3 and 4 mean. */
+  readonly levels: readonly [Localized, Localized, Localized, Localized];
+}
+
+const STANDARD_CRITERIA: Readonly<Record<string, CriterionText>> = {
+  content: {
+    label: { en: 'Content and arguments', nl: 'Inhoud en argumenten' },
+    levels: [
+      {
+        en: 'Few arguments, unclear or off the topic.',
+        nl: 'Weinig argumenten, onduidelijk of naast het onderwerp.',
+      },
+      {
+        en: 'Some arguments, but thin or poorly explained.',
+        nl: 'Enkele argumenten, maar mager of slecht uitgelegd.',
+      },
+      {
+        en: 'Clear and relevant arguments, mostly well explained.',
+        nl: 'Duidelijke en relevante argumenten, meestal goed uitgelegd.',
+      },
+      {
+        en: 'Strong arguments that are well built and hold together.',
+        nl: 'Sterke argumenten, goed opgebouwd en samenhangend.',
+      },
+    ],
+  },
+  rebuttal: {
+    label: { en: 'Rebuttal', nl: 'Weerlegging' },
+    levels: [
+      { en: 'Does not respond to the other side.', nl: 'Gaat niet in op de andere kant.' },
+      {
+        en: 'Responds now and then, without real counterarguments.',
+        nl: 'Reageert af en toe, zonder echte tegenargumenten.',
+      },
+      {
+        en: 'Answers the main points of the other side.',
+        nl: 'Weerlegt de belangrijkste punten van de andere kant.',
+      },
+      {
+        en: 'Takes the other side’s arguments apart, sharply and fairly.',
+        nl: 'Ontkracht de argumenten van de andere kant, scherp en eerlijk.',
+      },
+    ],
+  },
+  evidence: {
+    label: { en: 'Evidence and examples', nl: 'Bewijs en voorbeelden' },
+    levels: [
+      { en: 'No evidence or examples.', nl: 'Geen bewijs of voorbeelden.' },
+      {
+        en: 'A few examples, loosely tied to the arguments.',
+        nl: 'Enkele voorbeelden, los van de argumenten.',
+      },
+      {
+        en: 'Fitting facts or examples for most arguments.',
+        nl: 'Passende feiten of voorbeelden bij de meeste argumenten.',
+      },
+      {
+        en: 'Convincing, well-chosen evidence, with sources where it matters.',
+        nl: 'Overtuigend, goed gekozen bewijs, met bronnen waar het telt.',
+      },
+    ],
+  },
+  delivery: {
+    label: { en: 'Delivery', nl: 'Presentatie' },
+    levels: [
+      {
+        en: 'Hard to follow: reads out, too fast or too quiet.',
+        nl: 'Moeilijk te volgen: leest voor, te snel of te stil.',
+      },
+      {
+        en: 'Easy to hear, but little eye contact or conviction.',
+        nl: 'Verstaanbaar, maar weinig oogcontact of overtuiging.',
+      },
+      {
+        en: 'Clear and confident, and keeps to the time.',
+        nl: 'Duidelijk en zelfzeker, en houdt zich aan de tijd.',
+      },
+      {
+        en: 'Engaging and persuasive, with a good use of voice and pauses.',
+        nl: 'Boeiend en overtuigend, met een goed gebruik van stem en pauzes.',
+      },
+    ],
+  },
+};
+
+/** The standard rubric in a UI language. Ids, scale and weights are the same in each. */
+export function standardRubric(locale: Locale): Rubric {
+  return {
+    scale: { min: 1, max: 4 },
+    scope: 'team',
+    criteria: Object.entries(STANDARD_CRITERIA).map(([id, text]) => ({
+      id,
+      label: text.label[locale],
+      weight: 1,
+      levels: text.levels.map((level) => level[locale]),
+    })),
+  };
+}
 
 export const PRESETS: readonly Preset[] = [
   GRAFFITI_PRESET,

@@ -1,9 +1,10 @@
 // Sessions as a class leaves them, for the report tests (#7): the graffiti
 // format, debate 1 played and finished, debate 2 begun, debate 3 with names
-// only; and a Karl Popper debate with prep time and audience questions (#8).
+// only; a Karl Popper debate with prep time and audience questions (#8); and
+// a graffiti debate scored by two jurors on the standard rubric (#10).
 // Time is in seconds on a fake clock.
 import type { DebateConfig } from '../model/config';
-import { GRAFFITI_PRESET, KARL_POPPER_PRESET } from '../model/presets';
+import { GRAFFITI_PRESET, KARL_POPPER_PRESET, standardRubric } from '../model/presets';
 import { initialState, reducer, type Action, type AppState } from '../model/reducer';
 
 const at = (seconds: number) => seconds * 1000;
@@ -106,6 +107,61 @@ export function playedPopperSession(): AppState {
     { type: 'adjust-answers', side: 'pro', delta: 1 },
     { type: 'adjust-answers', side: 'con', delta: 1 },
     { type: 'finish-debate', now: at(90) },
+  ];
+  return actions.reduce(reducer, initialState(config));
+}
+
+/**
+ * The graffiti format with the standard rubric (#10) in English and a jury
+ * step added at the end (step 11, id `s1`), as the e2e test of #10 sets it up.
+ */
+export function graffitiWithJury(scope: 'team' | 'student' = 'team'): DebateConfig {
+  const config = GRAFFITI_PRESET.build('en');
+  return {
+    ...config,
+    format: {
+      ...config.format,
+      rubric: { ...standardRubric('en'), scope },
+      steps: [...config.format.steps, { id: 's1', type: 'jury', label: '' }],
+    },
+  };
+}
+
+/** Juror `jurorId` scores a team on the four standard criteria, in their order. */
+function scoreTeam(jurorId: string, side: 'pro' | 'con', scores: readonly number[]): Action[] {
+  const criteria = ['content', 'rebuttal', 'evidence', 'delivery'];
+  return scores.map((score, index) => ({
+    type: 'set-score',
+    jurorId,
+    target: { side, slot: null },
+    criterionId: criteria[index],
+    score,
+  }));
+}
+
+/**
+ * Debate 1 in that format, finished at the jury step: juror 1 scores the for
+ * team 3, 2, 4, 3 (12) and the against team 2, 3, 3, 2 (10); juror 2, Mr.
+ * Smith, scores them 4, 3, 3, 4 (14) and 3, 3, 2, 2 (10). On average 13 for
+ * and 10 against.
+ */
+export function playedJurySession(): AppState {
+  const config = graffitiWithJury();
+  const team = (side: 'pro' | 'con', names: string[]): Action[] =>
+    names.map((name, slot) => ({ type: 'set-name', debateId: 'd1', side, slot, name }));
+  const actions: Action[] = [
+    { type: 'add-debate', topicId: 't1' },
+    ...team('pro', ['Ann', 'Bert']),
+    ...team('con', ['Dirk', 'Eva']),
+    { type: 'open-debate', debateId: 'd1', now: 0 },
+    { type: 'go-to-step', step: 10, now: 0 },
+    ...scoreTeam('j1', 'pro', [3, 2, 4, 3]),
+    ...scoreTeam('j1', 'con', [2, 3, 3, 2]),
+    { type: 'add-juror' },
+    { type: 'set-juror-name', jurorId: 'j2', name: 'Mr. Smith' },
+    ...scoreTeam('j2', 'pro', [4, 3, 3, 4]),
+    ...scoreTeam('j2', 'con', [3, 3, 2, 2]),
+    { type: 'finish-debate', now: at(10) },
   ];
   return actions.reduce(reducer, initialState(config));
 }

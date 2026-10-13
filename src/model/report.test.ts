@@ -1,6 +1,12 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { playedPopperSession, playedSession, popperWithQuestions } from '../test/playedSession';
+import {
+  graffitiWithJury,
+  playedJurySession,
+  playedPopperSession,
+  playedSession,
+  popperWithQuestions,
+} from '../test/playedSession';
 import { STEP_TYPES, type DebateConfig, type Step } from './config';
 import { setTopicText } from './edit';
 import { GRAFFITI_PRESET } from './presets';
@@ -209,10 +215,11 @@ describe('buildReport', () => {
 describe('stepResult', () => {
   it('has a result of its own kind for every kind of step', () => {
     const [debate] = playedSession().session.debates;
-    const steps: readonly Step[] = [...config.format.steps, ...popperWithQuestions().format.steps];
+    const jury = graffitiWithJury().format;
+    const steps: readonly Step[] = [...jury.steps, ...popperWithQuestions().format.steps];
     expect(new Set(steps.map((step) => step.type))).toEqual(new Set(STEP_TYPES));
     for (const step of steps) {
-      expect(stepResult(debate, step, 0).type).toBe(step.type);
+      expect(stepResult(debate, step, 0, jury.rubric).type).toBe(step.type);
     }
   });
 });
@@ -289,6 +296,146 @@ describe('buildReport: cross-examination, audience questions and prep time (#8)'
 
   it('has no prep time for a format without a bank', () => {
     expect(first().prep).toBeNull();
+  });
+});
+
+describe('buildReport: the jury (#10)', () => {
+  const jury = (state = playedJurySession()) =>
+    result(buildReport(state.config, state.session, 0).debates[0], 's1', 'jury');
+
+  it('names the jurors who scored, by their place on the jury', () => {
+    expect(jury().jurors).toEqual([
+      { id: 'j1', number: 1, name: '' },
+      { id: 'j2', number: 2, name: 'Mr. Smith' },
+    ]);
+  });
+
+  it('gives each juror’s scores and weighted total per team, and their average', () => {
+    const [pro, con] = jury().scored;
+    expect(pro).toEqual({
+      side: 'pro',
+      member: null,
+      sheets: [
+        { scores: [3, 2, 4, 3], total: 12 },
+        { scores: [4, 3, 3, 4], total: 14 },
+      ],
+      average: { scores: [3.5, 2.5, 3.5, 3.5], total: 13 },
+    });
+    expect(con.side).toBe('con');
+    expect(con.average).toEqual({ scores: [2.5, 3, 2.5, 2], total: 10 });
+  });
+
+  it('weighs each criterion by its weight in the total', () => {
+    const state = playedJurySession();
+    const rubric = state.config.format.rubric;
+    if (rubric === undefined) throw new Error('no rubric');
+    const weighed = {
+      ...state,
+      config: {
+        ...state.config,
+        format: {
+          ...state.config.format,
+          rubric: {
+            ...rubric,
+            criteria: rubric.criteria.map((criterion) =>
+              criterion.id === 'content' ? { ...criterion, weight: 3 } : criterion,
+            ),
+          },
+        },
+      },
+    };
+    // Juror 1 for: 3×3 + 2 + 4 + 3 = 18; juror 2: 4×3 + 3 + 3 + 4 = 22.
+    expect(jury(weighed).scored[0].sheets.map((sheet) => sheet.total)).toEqual([18, 22]);
+    expect(jury(weighed).scored[0].average.total).toBe(20);
+  });
+
+  it('averages each criterion and the total over the jurors who scored them', () => {
+    const state = reducer(
+      reducer(reducer(playedJurySession(), { type: 'open-debate', debateId: 'd1', now: 0 }), {
+        type: 'add-juror',
+      }),
+      {
+        type: 'set-score',
+        jurorId: 'j3',
+        target: { side: 'pro', slot: null },
+        criterionId: 'content',
+        score: 1,
+      },
+    );
+    const [pro, con] = jury(state).scored;
+    expect(pro.sheets.map((sheet) => sheet.total)).toEqual([12, 14, 1]);
+    expect(pro.average).toEqual({ scores: [(3 + 4 + 1) / 3, 2.5, 3.5, 3.5], total: 9 });
+    // Juror 3 gave the against team nothing: it is not part of their average.
+    expect(con.sheets[2]).toEqual({ scores: [null, null, null, null], total: null });
+    expect(con.average.total).toBe(10);
+  });
+
+  it('scores each student when the rubric does, a sheet per student with a name', () => {
+    const state = playedJurySession();
+    const rubric = state.config.format.rubric;
+    if (rubric === undefined) throw new Error('no rubric');
+    const perStudent = reducer(
+      reducer(
+        {
+          ...state,
+          config: {
+            ...state.config,
+            format: { ...state.config.format, rubric: { ...rubric, scope: 'student' } },
+          },
+        },
+        { type: 'open-debate', debateId: 'd1', now: 0 },
+      ),
+      {
+        type: 'set-score',
+        jurorId: 'j2',
+        target: { side: 'con', slot: 1 },
+        criterionId: 'delivery',
+        score: 4,
+      },
+    );
+    const result = jury(perStudent);
+    expect(result.scored.map((scored) => [scored.side, scored.member?.name])).toEqual([
+      ['pro', 'Ann'],
+      ['pro', 'Bert'],
+      ['con', 'Dirk'],
+      ['con', 'Eva'],
+    ]);
+    // The team scores stay in the session, but a rubric per student does not read them.
+    expect(result.jurors).toEqual([{ id: 'j2', number: 2, name: 'Mr. Smith' }]);
+    expect(result.scored[3].sheets).toEqual([{ scores: [null, null, null, 4], total: 4 }]);
+    expect(result.scored[0].average.total).toBeNull();
+  });
+
+  it('has no jurors when nobody scored', () => {
+    const state = reducer(
+      reducer(
+        reducer(
+          reducer(
+            reducer(
+              {
+                config: graffitiWithJury(),
+                session: { debates: [], current: null },
+              },
+              { type: 'add-debate', topicId: 't1' },
+            ),
+            { type: 'set-name', debateId: 'd1', side: 'pro', slot: 0, name: 'Ann' },
+          ),
+          { type: 'set-name', debateId: 'd1', side: 'pro', slot: 1, name: 'Bert' },
+        ),
+        { type: 'set-name', debateId: 'd1', side: 'con', slot: 0, name: 'Dirk' },
+      ),
+      { type: 'set-name', debateId: 'd1', side: 'con', slot: 1, name: 'Eva' },
+    );
+    const finished = reducer(reducer(state, { type: 'open-debate', debateId: 'd1', now: 0 }), {
+      type: 'finish-debate',
+      now: 0,
+    });
+    const result = jury(finished);
+    expect(result.jurors).toEqual([]);
+    expect(result.scored.map((scored) => scored.average)).toEqual([
+      { scores: [null, null, null, null], total: null },
+      { scores: [null, null, null, null], total: null },
+    ]);
   });
 });
 

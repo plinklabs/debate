@@ -7,7 +7,7 @@ export function stepName(step: Step, t: Translate): string {
   return label === '' ? t(`stepType.${step.type}`) : label;
 }
 
-/** Whose turn a step is: a side, one side asking the other, both teams, or the audience. */
+/** Whose turn a step is: a side, one side asking the other, both teams, the audience or the jury. */
 export function stepWho(step: Step, format: Format, t: Translate): string {
   switch (step.type) {
     case 'cross-examination':
@@ -20,6 +20,8 @@ export function stepWho(step: Step, format: Format, t: Translate): string {
     case 'vote-before':
     case 'vote-after':
       return t('debate.who.audience');
+    case 'jury':
+      return t('debate.who.jury');
     case 'speech':
     case 'consultation':
     case 'free-round': {

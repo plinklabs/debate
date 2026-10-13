@@ -279,6 +279,32 @@ td.num {
   color: var(--muted);
 }
 
+/* The jury's scores: a table per juror, each in a box that scrolls sideways
+   when its criteria do not fit the width. */
+.wide {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.wide + .wide {
+  margin-top: 24px;
+}
+
+/* As wide as the page, or wider when the criteria need it: then the box
+   scrolls, and the names stay whole. */
+.jury {
+  width: auto;
+  min-width: 100%;
+}
+
+.jury tbody th {
+  white-space: nowrap;
+}
+
+.jury .total {
+  font-weight: 700;
+}
+
 /* Overtime under what was left, so the figures stay in one column. */
 .prep .mark {
   display: block;
@@ -370,8 +396,14 @@ td.num {
   .answers,
   .prep,
   .vote,
+  .jury,
   .bar,
   .shift {
     break-inside: avoid;
+  }
+
+  /* On paper nothing scrolls: the table takes the width it has. */
+  .wide {
+    overflow: visible;
   }
 }

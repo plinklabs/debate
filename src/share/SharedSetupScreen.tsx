@@ -143,6 +143,19 @@ export function Contents({ config }: { readonly config: DebateConfig }) {
               </dd>
             </div>
           )}
+          {format.rubric !== undefined && (
+            <div>
+              <dt>{t('format.rubric')}</dt>
+              <dd>
+                {t('preview.rubric', {
+                  count: format.rubric.criteria.length,
+                  min: format.rubric.scale.min,
+                  max: format.rubric.scale.max,
+                  perStudent: format.rubric.scope === 'student',
+                })}
+              </dd>
+            </div>
+          )}
         </dl>
         <dl className={styles.sides}>
           {SIDES.map((side) => (
@@ -158,6 +171,25 @@ export function Contents({ config }: { readonly config: DebateConfig }) {
             <StepLine key={step.id} step={step} format={format} />
           ))}
         </ol>
+        {format.rubric !== undefined && (
+          <>
+            <h3 className={`${setup.groupTitle} ${styles.listTitle}`}>
+              {t('format.rubric.criteria')}
+            </h3>
+            <ol className={styles.steps}>
+              {format.rubric.criteria.map((criterion) => (
+                <li key={criterion.id} className={styles.step}>
+                  <span className={styles.stepName}>{criterion.label}</span>
+                  {criterion.weight !== 1 && (
+                    <span className={styles.stepDetails}>
+                      {t('preview.weight', { weight: criterion.weight })}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </>
+        )}
       </section>
     </div>
   );
@@ -255,6 +287,12 @@ function issuePlace(t: Translate, path: IssuePath): string | null {
       return t('format.teamSize');
     case 'prepTime':
       return t('format.prepTime');
+    case 'rubric': {
+      const criterion = path[3];
+      return item === 'criteria' && typeof criterion === 'number'
+        ? t('format.rubric.criterion', { number: criterion + 1 })
+        : t('format.rubric');
+    }
     default:
       return t('setup.tab.format');
   }

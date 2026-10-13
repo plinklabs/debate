@@ -146,6 +146,11 @@
   margin-top: var(--space-4);
 }
 
+/* A second list after the steps, such as the rubric's criteria. */
+.listTitle {
+  margin-top: var(--space-5);
+}
+
 .sides {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

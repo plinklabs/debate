@@ -2,7 +2,7 @@
 // and the teams, planned against used time per clock of every timed step, who
 // spoke and how often, who asked and answered in each cross-examination, the
 // balance of each free round, the answers to the audience, the prep time each
-// team used and the audience vote with its shift. Plain data, with the names
+// team used, the audience vote with its shift, and the jury's scores (#10). Plain data, with the names
 // in it, so it stays on the private side of the model; the HTML report and the
 // CSV (src/report/) only lay it out.
 //
@@ -18,12 +18,15 @@ import {
   type DebateConfig,
   type Format,
   type FreeRoundStep,
+  type JuryStep,
+  type Rubric,
   type Side,
   type SpeechStep,
   type Step,
   type Topic,
   type VoteStep,
 } from './config';
+import { averageSheet, hasScored, juryOf, scoreTargets, sheetOf, type Sheet } from './jury';
 import {
   clocksOf,
   freeRoundTurns,
@@ -105,6 +108,38 @@ export interface VoteResult<T extends VoteStep['type'] = VoteStep['type']> {
   readonly counted: boolean;
 }
 
+/** A juror who gave any score. */
+export interface JurorResult {
+  readonly id: string;
+  /** Their place on the jury, from 1: "Juror 2" for one without a name. */
+  readonly number: number;
+  /** As typed, without the spaces around it; may be empty. */
+  readonly name: string;
+}
+
+/** The scores of one team, or of one student. */
+export interface ScoredResult {
+  readonly side: Side;
+  /** The student when the rubric scores students; `null` for a team. */
+  readonly member: Member | null;
+  /** Each juror's sheet, in the order of `JuryResult.jurors`. */
+  readonly sheets: readonly Sheet[];
+  /** The sheets averaged: each criterion and the total over the jurors who scored them. */
+  readonly average: Sheet;
+}
+
+/** The jury's scores (#10). They are the debate's, and the jury step shows them. */
+export interface JuryResult {
+  readonly type: 'jury';
+  readonly step: JuryStep;
+  /** `null` only in a format without a rubric, which does not validate. */
+  readonly rubric: Rubric | null;
+  /** The jurors who gave any score, in the order of the jury. */
+  readonly jurors: readonly JurorResult[];
+  /** Every team or student the rubric scores, scored or not. */
+  readonly scored: readonly ScoredResult[];
+}
+
 /**
  * What a report holds for one step, discriminated on `type` like `Step`. A
  * new kind of step gets a member here and a case in `stepResult`; the
@@ -117,7 +152,8 @@ export type StepResult =
   | CrossExaminationResult
   | AudienceQuestionsResult
   | VoteResult<'vote-before'>
-  | VoteResult<'vote-after'>;
+  | VoteResult<'vote-after'>
+  | JuryResult;
 
 /** A student and how often they spoke. */
 export interface MemberResult extends Member {
@@ -192,7 +228,7 @@ function debateResult(
   now: number,
 ): DebateResult {
   const { format } = config;
-  const steps = format.steps.map((step) => stepResult(debate, step, now));
+  const steps = format.steps.map((step) => stepResult(debate, step, now, format.rubric));
   const before = steps.find((r): r is VoteResult<'vote-before'> => r.type === 'vote-before');
   const after = steps.find((r): r is VoteResult<'vote-after'> => r.type === 'vote-after');
   return {
@@ -234,8 +270,16 @@ function prepResult(format: Format, debate: Debate, now: number): PrepResult | n
   };
 }
 
-/** What the report holds for one step. The switch covers every kind of step. */
-export function stepResult(debate: Debate, step: Step, now: number): StepResult {
+/**
+ * What the report holds for one step. The switch covers every kind of step;
+ * the jury's needs the format's `rubric`.
+ */
+export function stepResult(
+  debate: Debate,
+  step: Step,
+  now: number,
+  rubric: Rubric | undefined,
+): StepResult {
   switch (step.type) {
     case 'speech': {
       const members = membersOf(debate.teams, step.side);
@@ -294,7 +338,39 @@ export function stepResult(debate: Debate, step: Step, now: number): StepResult 
       return { type: step.type, step, ...voteOf(debate, step) };
     case 'vote-after':
       return { type: step.type, step, ...voteOf(debate, step) };
+    case 'jury':
+      return juryResult(debate, step, rubric ?? null);
   }
+}
+
+function juryResult(debate: Debate, step: JuryStep, rubric: Rubric | null): JuryResult {
+  if (rubric === null) return { type: 'jury', step, rubric, jurors: [], scored: [] };
+  const jury = juryOf(debate);
+  const targets = scoreTargets(rubric, debate.teams);
+  // Only the jurors who scored anything: an empty sheet says nothing.
+  const jurors = jury.jurors
+    .map((juror, index) => ({ juror, number: index + 1 }))
+    .filter(({ juror }) => targets.some((target) => hasScored(sheetOf(rubric, juror, target))));
+  const scored = targets.map((target): ScoredResult => {
+    const sheets = jurors.map(({ juror }) => sheetOf(rubric, juror, target));
+    const members = membersOf(debate.teams, target.side);
+    return {
+      side: target.side,
+      member:
+        target.slot === null
+          ? null
+          : (members.find((member) => member.slot === target.slot) ?? null),
+      sheets,
+      average: averageSheet(rubric, sheets),
+    };
+  });
+  return {
+    type: 'jury',
+    step,
+    rubric,
+    jurors: jurors.map(({ juror, number }) => ({ id: juror.id, number, name: juror.name.trim() })),
+    scored,
+  };
 }
 
 function voteOf(debate: Debate, step: VoteStep): { votes: Votes; counted: boolean } {

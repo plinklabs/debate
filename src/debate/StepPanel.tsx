@@ -7,6 +7,7 @@ import { Countdown } from './Countdown';
 import { CrossExaminationPanel } from './CrossExaminationPanel';
 import styles from './debate.module.css';
 import { FreeRoundPanel } from './FreeRoundPanel';
+import { JuryPanel } from './JuryPanel';
 import type { PanelProps } from './panels';
 import { SpeechPanel } from './SpeechPanel';
 import { VotePanel } from './VotePanel';
@@ -32,6 +33,8 @@ export function StepPanel(props: PanelProps<Step>): ReactNode {
     case 'vote-before':
     case 'vote-after':
       return <VotePanel {...props} step={step} />;
+    case 'jury':
+      return <JuryPanel {...props} step={step} />;
   }
 }
 

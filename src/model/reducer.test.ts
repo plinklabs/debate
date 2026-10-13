@@ -23,6 +23,7 @@ import {
   type CrossExaminationRecord,
   type Debate,
   type FreeRoundRecord,
+  type RecordedStep,
   type SpeechRecord,
 } from './session';
 import { countdown, elapsedMs, formatCountdown, isRunning, timingOf } from './timer';
@@ -37,9 +38,10 @@ function apply(state: AppState, ...actions: Action[]): AppState {
   return actions.reduce(reducer, state);
 }
 
-function stepById(id: string, steps: readonly Step[] = format.steps): Step {
+/** A step with a record of its own: any but the jury. */
+function stepById(id: string, steps: readonly Step[] = format.steps): RecordedStep {
   const step = steps.find((candidate) => candidate.id === id);
-  if (step === undefined) throw new Error(`no step ${id}`);
+  if (step === undefined || step.type === 'jury') throw new Error(`no step ${id} with a record`);
   return step;
 }
 

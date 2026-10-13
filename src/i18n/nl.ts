@@ -25,6 +25,7 @@ const stepTypes: StepTypeNames = {
   'stepType.audience-questions': 'Publieksvragen',
   'stepType.vote-before': 'Stemming vooraf',
   'stepType.vote-after': 'Stemming achteraf',
+  'stepType.jury': 'Juryoordeel',
 };
 
 const stepType = (type: StepType) => stepTypes[`stepType.${type}`];
@@ -65,6 +66,12 @@ const issues: IssueMessages = {
     `De kleinste teamgrootte (${n(min)}) is groter dan de grootste (${n(max)}).`,
   'issue.vote-order': () =>
     `De stap ‘${stepType('vote-after')}’ staat vóór de stap ‘${stepType('vote-before')}’.`,
+  'issue.unknown-scope': ({ scope }) =>
+    `Er bestaat geen manier van scoren ‘${scope}’: een beoordelingsraster scoort per ‘team’ of per ‘student’.`,
+  'issue.scale-order': ({ min, max }) =>
+    `De laagste score (${n(min)}) ligt niet onder de hoogste (${n(max)}).`,
+  'issue.jury-without-rubric': () =>
+    `Een stap ‘${stepType('jury')}’ heeft een beoordelingsraster nodig: voeg er een toe, of verwijder de stap.`,
 };
 
 export const nl: Dictionary = {
@@ -109,7 +116,7 @@ export const nl: Dictionary = {
   'format.preset': 'Sjabloon',
   'format.usePreset': 'Dit sjabloon gebruiken',
   'format.usePreset.question':
-    'Dit vervangt de kanten, de teamgrootte, de voorbereidingstijd en alle stappen. De stellingen blijven.',
+    'Dit vervangt de kanten, de teamgrootte, de voorbereidingstijd, het beoordelingsraster en alle stappen. De stellingen blijven.',
   'format.usePreset.confirm': 'Debatvorm vervangen',
   'format.sides': 'Kanten',
   'format.side.pro': 'Voor de stelling',
@@ -130,10 +137,40 @@ export const nl: Dictionary = {
   'format.step.seconds': 'Seconden',
   'format.step.secondsPerTeam': 'Seconden per team',
   'format.step.vote': 'Het publiek stemt. Geen klok.',
+  'format.step.jury': 'De jury scoort op het beoordelingsraster. Geen klok.',
   'format.step.moveUp': ({ number }) => `Stap ${n(number)} naar boven`,
   'format.step.moveDown': ({ number }) => `Stap ${n(number)} naar beneden`,
   'format.step.remove': ({ number }) => `Stap ${n(number)} verwijderen`,
   'format.addStep': 'Stap toevoegen',
+
+  'format.rubric': 'Beoordelingsraster',
+  'format.rubric.hint':
+    'Een jury scoort de teams of de leerlingen op deze criteria in een stap ‘Juryoordeel’, het ene jurylid na het andere op dit toestel. Het raster gaat mee als je de opzet deelt; de scores blijven in deze browser.',
+  'format.rubric.addStandard': 'Standaardraster toevoegen',
+  'format.rubric.addCustom': 'Eigen raster',
+  'format.rubric.scale.min': 'Laagste score',
+  'format.rubric.scale.max': 'Hoogste score',
+  'format.rubric.scope': 'Scores voor',
+  'format.rubric.scope.team': 'Elk team',
+  'format.rubric.scope.student': 'Elke leerling',
+  'format.rubric.maxTotal': ({ max }) => `Hoogste totaal: ${n(max)}`,
+  'format.rubric.criteria': 'Beoordelingscriteria',
+  'format.rubric.criterion': ({ number }) => `Criterium ${n(number)}`,
+  'format.rubric.criterion.label': 'Naam',
+  'format.rubric.criterion.weight': 'Gewicht',
+  'format.rubric.criterion.levels': 'Wat elke score betekent',
+  'format.rubric.level': ({ level }) => `Score ${n(level)}`,
+  'format.rubric.criterion.moveUp': ({ number }) => `Criterium ${n(number)} naar boven`,
+  'format.rubric.criterion.moveDown': ({ number }) => `Criterium ${n(number)} naar beneden`,
+  'format.rubric.criterion.remove': ({ number }) => `Criterium ${n(number)} verwijderen`,
+  'format.rubric.newCriterion': 'Nieuw criterium',
+  'format.rubric.addCriterion': 'Criterium toevoegen',
+  'format.rubric.noJuryStep':
+    'Nog geen stap scoort erop: voeg een stap ‘Juryoordeel’ toe, meestal op het einde.',
+  'format.rubric.remove': 'Raster verwijderen',
+  'format.rubric.remove.question': 'Het beoordelingsraster verwijderen, met alle criteria?',
+  'format.rubric.removeBlocked':
+    'Een stap ‘Juryoordeel’ scoort op dit raster: verwijder eerst die stap om het raster te verwijderen.',
 
   'debates.intro':
     'Een debat is één stelling met een team aan elke kant. Het kan beginnen zodra beide teams volledig zijn.',
@@ -208,6 +245,11 @@ export const nl: Dictionary = {
   'report.vote': 'Stemming van het publiek',
   'report.notCounted': 'niet geteld',
   'report.shareFor': ({ side }) => `Aandeel ${side}`,
+  'report.jury': 'Scores van de jury',
+  'report.jury.scale': ({ min, max, total }) =>
+    `Elk criterium krijgt een score van ${n(min)} tot ${n(max)}; het hoogste totaal is ${n(total)}.`,
+  'report.jury.average': ({ count }) => `Gemiddelde van ${n(count)} juryleden`,
+  'report.jury.none': 'Geen scores.',
 
   'csv.debate': 'Debat',
   'csv.topic': 'Stelling',
@@ -229,6 +271,10 @@ export const nl: Dictionary = {
   'csv.votesAfter': ({ side }) => `Stemmen ${side} achteraf`,
   'csv.shiftVotes': ({ side }) => `Verschuiving ${side} (stemmen)`,
   'csv.shiftPoints': ({ side }) => `Verschuiving ${side} (pp)`,
+  'csv.score': ({ step, criterion }) => `${step}: ${criterion}`,
+  'csv.total': ({ step }) => `${step}: totaal`,
+  'csv.jurors': ({ step }) => `${step}: juryleden`,
+  'csv.jurorTotal': ({ step, number }) => `${step}: totaal jurylid ${n(number)}`,
   'csv.done': 'Afgerond',
   'csv.yes': 'ja',
   'csv.no': 'nee',
@@ -279,6 +325,9 @@ export const nl: Dictionary = {
   'preview.teamSize': ({ min, max }) => (min === max ? n(min) : `${n(min)} tot ${n(max)}`),
   'preview.perTeam': ({ duration }) => `${duration} per team`,
   'preview.asks': ({ side }) => `${side} vraagt`,
+  'preview.rubric': ({ count, min, max, perStudent }) =>
+    `${count === 1 ? '1 criterium' : `${n(count)} criteria`}, ${n(min)} tot ${n(max)}, ${perStudent ? 'per leerling' : 'per team'}`,
+  'preview.weight': ({ weight }) => `telt ${n(weight)}×`,
   'preview.impact': ({ debates, results }) =>
     debates === 1
       ? `Er is één debat in deze browser${results > 0 ? ', en het heeft al resultaten' : ''}. Het blijft, maar volgt vanaf nu deze opzet:`
@@ -309,6 +358,7 @@ export const nl: Dictionary = {
   'debate.who.audience': 'Het publiek',
   'debate.who.crossExam': ({ asking, answering }) => `${asking} vraagt, ${answering} antwoordt`,
   'debate.who.audienceQuestions': 'Het publiek en beide teams',
+  'debate.who.jury': 'De jury',
   'debate.floor': ({ name }) => `${name} heeft het woord`,
   'debate.tapSpeaker': 'Tik op wie spreekt.',
   'debate.tapFreeRound': 'Tik op een naam: de klok van dat team loopt.',
@@ -354,8 +404,30 @@ export const nl: Dictionary = {
   'debate.finish': 'Debat afsluiten',
   'debate.keys': 'Spatie: start of pauze · ← →: vorige of volgende stap',
   'debate.clear': 'Stap wissen',
-  'debate.clear.question': 'De tijd, de sprekers of de stemmen van deze stap wissen?',
+  'debate.clear.question': 'De tijd, de sprekers, de stemmen of de scores van deze stap wissen?',
   'debate.clear.confirm': 'Wissen',
+
+  'jury.prompt.team':
+    'Geef elk team een score op elk criterium. De juryleden wisselen elkaar af op dit toestel: voeg er een toe voor elk.',
+  'jury.prompt.student':
+    'Geef elke leerling een score op elk criterium. De juryleden wisselen elkaar af op dit toestel: voeg er een toe voor elk.',
+  'jury.jurors': 'Juryleden',
+  'jury.juror': ({ number }) => `Jurylid ${n(number)}`,
+  'jury.add': 'Jurylid toevoegen',
+  'jury.name': 'Naam van dit jurylid (mag leeg)',
+  'jury.remove': ({ juror }) => `${juror} verwijderen`,
+  'jury.remove.question': ({ juror }) =>
+    `${juror} verwijderen, met alle scores die gegeven werden?`,
+  'jury.remove.confirm': 'Jurylid verwijderen',
+  'jury.sheet': ({ juror }) => `Scoreblad van ${juror}`,
+  'jury.student': ({ name, side }) => `${name} (${side})`,
+  'jury.weight': ({ weight }) => `telt ${n(weight)}×`,
+  'jury.clearScore': ({ criterion, who }) => `Score van ${who} voor ${criterion} wissen`,
+  'jury.total': 'Totaal',
+  'jury.notScored': 'Nog geen score.',
+  'jury.overview': 'Totalen van alle juryleden',
+  'jury.average': 'Gemiddelde',
+  'jury.noRubric': 'Deze debatvorm heeft geen beoordelingsraster om op te scoren.',
 
   ...stepTypes,
   ...issues,

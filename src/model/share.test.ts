@@ -1,8 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { CONFIG_VERSION, LIMITS, type DebateConfig, type Step } from './config';
+import { CONFIG_VERSION, LIMITS, scaleLevels, type DebateConfig, type Step } from './config';
 import { LOCALES } from './locale';
-import { GRAFFITI_PRESET, PRESETS } from './presets';
+import { GRAFFITI_PRESET, PRESETS, standardRubric } from './presets';
 import { initialState, reducer, type Action } from './reducer';
 import {
   MAX_LINK_LENGTH,
@@ -47,6 +47,19 @@ function largestConfig(): DebateConfig {
       sides: { pro: text(LIMITS.sideLabelLength), con: text(LIMITS.sideLabelLength) },
       teamSize: { min: 1, max: LIMITS.teamSize.max },
       prepTime: { secondsPerTeam: LIMITS.prepSeconds.max },
+      // The largest rubric: every criterion with a line for every level.
+      rubric: {
+        scale: LIMITS.rubricScale,
+        scope: 'student',
+        criteria: Array.from({ length: LIMITS.criteria.max }, (_, index) => ({
+          id: `criterion-${index}-${'z'.repeat(LIMITS.idLength)}`.slice(0, LIMITS.idLength),
+          label: text(LIMITS.criterionLabelLength),
+          weight: LIMITS.criterionWeight.max,
+          levels: Array.from({ length: scaleLevels(LIMITS.rubricScale) }, () =>
+            text(LIMITS.levelLength),
+          ),
+        })),
+      },
       steps,
     },
     topics: Array.from({ length: LIMITS.topics.max }, (_, index) => ({
@@ -86,6 +99,18 @@ describe('a setup as a link', () => {
     const encoded = await encodeConfig(config);
     expect(encoded.length).toBeLessThan(MAX_LINK_LENGTH);
     expect(await decodeConfig(encoded)).toEqual({ ok: true, config });
+  });
+
+  it('carries the jury’s rubric and step (#10)', async () => {
+    const config: DebateConfig = {
+      ...GRAFFITI_EN,
+      format: {
+        ...GRAFFITI_EN.format,
+        rubric: standardRubric('en'),
+        steps: [...GRAFFITI_EN.format.steps, { id: 'jury', type: 'jury', label: 'Jury' }],
+      },
+    };
+    expect(await decodeConfig(await encodeConfig(config))).toEqual({ ok: true, config });
   });
 
   it('keeps text in any script, and characters JSON must escape', async () => {

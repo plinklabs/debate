@@ -7,11 +7,14 @@
 // stored setup goes through the same validation as a link or a file.
 
 import { LIMITS, isValidId, type DebateConfig, type Side } from './config';
+import { MAX_JURORS, isTargetKey } from './jury';
 import { freeze, initialState, type AppState } from './reducer';
 import {
   MAX_NAME_LENGTH,
   type Debate,
   type FreeRoundRecord,
+  type Juror,
+  type JuryRecord,
   type PrepRecord,
   type Session,
   type StepRecord,
@@ -164,6 +167,8 @@ function readDebate(value: unknown): Debate | null {
     records: readRecords(value.records),
     // A debate stored before #8 has no prep time: none used.
     prep: readPrep(value.prep),
+    // One stored before #10 has no jury: nobody scored.
+    jury: readJury(value.jury),
     done: value.done === true,
   };
 }
@@ -171,6 +176,46 @@ function readDebate(value: unknown): Debate | null {
 function readPrep(value: unknown): PrepRecord {
   const clocks = objectOr(objectOr(value).clocks);
   return { clocks: { pro: pausedTimer(clocks.pro), con: pausedTimer(clocks.con) }, active: null };
+}
+
+/**
+ * The jurors, each once, with their scores. A score is kept when it is a
+ * whole number that some rubric's scale can have: whether it is on the scale
+ * of this format is for the reader (jury.ts), as the scale may change.
+ */
+function readJury(value: unknown): JuryRecord {
+  const data = objectOr(value);
+  const jurors: Juror[] = [];
+  for (const item of listOr(data.jurors)) {
+    const juror = readJuror(item);
+    if (juror !== null && !jurors.some((other) => other.id === juror.id)) jurors.push(juror);
+    if (jurors.length === MAX_JURORS) break;
+  }
+  const current = jurors.find((juror) => juror.id === data.current) ?? jurors[0];
+  return { jurors, current: current?.id ?? null };
+}
+
+function readJuror(value: unknown): Juror | null {
+  if (!isObject(value) || !isValidId(value.id)) return null;
+  const scores: Record<string, Record<string, number>> = {};
+  for (const [key, raw] of Object.entries(objectOr(value.scores))) {
+    if (!isTargetKey(key)) continue;
+    const sheet: Record<string, number> = {};
+    for (const [criterion, score] of Object.entries(objectOr(raw))) {
+      if (isValidId(criterion) && isScoreValue(score)) sheet[criterion] = score;
+    }
+    if (Object.keys(sheet).length > 0) scores[key] = sheet;
+  }
+  return {
+    id: value.id,
+    name: typeof value.name === 'string' ? value.name.slice(0, MAX_NAME_LENGTH) : '',
+    scores,
+  };
+}
+
+function isScoreValue(value: unknown): value is number {
+  const { min, max } = LIMITS.rubricScale;
+  return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max;
 }
 
 /** Slots of a team that spoke, in order, each once. */

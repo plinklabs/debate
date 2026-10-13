@@ -27,6 +27,7 @@ const stepTypes: StepTypeNames = {
   'stepType.audience-questions': 'Audience questions',
   'stepType.vote-before': 'Vote before',
   'stepType.vote-after': 'Vote after',
+  'stepType.jury': 'Jury',
 };
 
 const stepType = (type: StepType) => stepTypes[`stepType.${type}`];
@@ -66,6 +67,12 @@ const issues: IssueMessages = {
     `The smallest team size (${n(min)}) is larger than the largest (${n(max)}).`,
   'issue.vote-order': () =>
     `The “${stepType('vote-after')}” step comes before the “${stepType('vote-before')}” step.`,
+  'issue.unknown-scope': ({ scope }) =>
+    `There is no way of scoring called “${scope}”: a rubric scores per “team” or per “student”.`,
+  'issue.scale-order': ({ min, max }) =>
+    `The lowest score (${n(min)}) is not below the highest (${n(max)}).`,
+  'issue.jury-without-rubric': () =>
+    `A “${stepType('jury')}” step needs a rubric to score on: add one, or remove the step.`,
 };
 
 export const en = {
@@ -117,7 +124,7 @@ export const en = {
   'format.preset': 'Preset',
   'format.usePreset': 'Use this preset',
   'format.usePreset.question':
-    'This replaces the sides, the team size, the prep time and every step. The topics stay.',
+    'This replaces the sides, the team size, the prep time, the rubric and every step. The topics stay.',
   'format.usePreset.confirm': 'Replace the format',
   'format.sides': 'Sides',
   'format.side.pro': 'For the topic',
@@ -138,10 +145,43 @@ export const en = {
   'format.step.seconds': 'Seconds',
   'format.step.secondsPerTeam': 'Seconds per team',
   'format.step.vote': 'The audience votes. No timer.',
+  'format.step.jury': 'The jury scores on the rubric. No timer.',
   'format.step.moveUp': ({ number }: { number: number }) => `Move step ${n(number)} up`,
   'format.step.moveDown': ({ number }: { number: number }) => `Move step ${n(number)} down`,
   'format.step.remove': ({ number }: { number: number }) => `Remove step ${n(number)}`,
   'format.addStep': 'Add step',
+
+  // The jury's rubric (#10): the criteria, the scale and who is scored.
+  'format.rubric': 'Jury rubric',
+  'format.rubric.hint':
+    'A jury scores the teams or the students on these criteria in a “Jury” step, one juror after another on this device. The rubric goes with the setup when you share it; the scores stay in this browser.',
+  'format.rubric.addStandard': 'Add standard rubric',
+  'format.rubric.addCustom': 'Custom rubric',
+  'format.rubric.scale.min': 'Lowest score',
+  'format.rubric.scale.max': 'Highest score',
+  'format.rubric.scope': 'Scored',
+  'format.rubric.scope.team': 'Per team',
+  'format.rubric.scope.student': 'Per student',
+  'format.rubric.maxTotal': ({ max }: { max: number }) => `Highest total: ${n(max)}`,
+  'format.rubric.criteria': 'Criteria',
+  'format.rubric.criterion': ({ number }: { number: number }) => `Criterion ${n(number)}`,
+  'format.rubric.criterion.label': 'Name',
+  'format.rubric.criterion.weight': 'Weight',
+  'format.rubric.criterion.levels': 'What each score means',
+  'format.rubric.level': ({ level }: { level: number }) => `Score ${n(level)}`,
+  'format.rubric.criterion.moveUp': ({ number }: { number: number }) =>
+    `Move criterion ${n(number)} up`,
+  'format.rubric.criterion.moveDown': ({ number }: { number: number }) =>
+    `Move criterion ${n(number)} down`,
+  'format.rubric.criterion.remove': ({ number }: { number: number }) =>
+    `Remove criterion ${n(number)}`,
+  'format.rubric.newCriterion': 'New criterion',
+  'format.rubric.addCriterion': 'Add criterion',
+  'format.rubric.noJuryStep': 'No step scores on it yet: add a “Jury” step, usually at the end.',
+  'format.rubric.remove': 'Remove rubric',
+  'format.rubric.remove.question': 'Remove the rubric with all its criteria?',
+  'format.rubric.removeBlocked':
+    'A “Jury” step scores on this rubric: remove that step first to remove the rubric.',
 
   // Debates: a topic with a team on each side.
   'debates.intro':
@@ -223,6 +263,11 @@ export const en = {
   'report.vote': 'Audience vote',
   'report.notCounted': 'not counted',
   'report.shareFor': ({ side }: { side: string }) => `Share ${side}`,
+  'report.jury': 'Jury scores',
+  'report.jury.scale': ({ min, max, total }: { min: number; max: number; total: number }) =>
+    `Each criterion is scored from ${n(min)} to ${n(max)}; the highest total is ${n(total)}.`,
+  'report.jury.average': ({ count }: { count: number }) => `Average of ${n(count)} jurors`,
+  'report.jury.none': 'No scores.',
 
   // Columns of the CSV file: one row per student.
   'csv.debate': 'Debate',
@@ -245,6 +290,12 @@ export const en = {
   'csv.votesAfter': ({ side }: { side: string }) => `Votes ${side} after`,
   'csv.shiftVotes': ({ side }: { side: string }) => `Shift ${side} (votes)`,
   'csv.shiftPoints': ({ side }: { side: string }) => `Shift ${side} (pp)`,
+  'csv.score': ({ step, criterion }: { step: string; criterion: string }) =>
+    `${step}: ${criterion}`,
+  'csv.total': ({ step }: { step: string }) => `${step}: total`,
+  'csv.jurors': ({ step }: { step: string }) => `${step}: jurors`,
+  'csv.jurorTotal': ({ step, number }: { step: string; number: number }) =>
+    `${step}: total juror ${n(number)}`,
   'csv.done': 'Finished',
   'csv.yes': 'yes',
   'csv.no': 'no',
@@ -298,6 +349,19 @@ export const en = {
     min === max ? n(min) : `${n(min)} to ${n(max)}`,
   'preview.perTeam': ({ duration }: { duration: string }) => `${duration} per team`,
   'preview.asks': ({ side }: { side: string }) => `${side} asks`,
+  'preview.rubric': ({
+    count,
+    min,
+    max,
+    perStudent,
+  }: {
+    count: number;
+    min: number;
+    max: number;
+    perStudent: boolean;
+  }) =>
+    `${count === 1 ? '1 criterion' : `${n(count)} criteria`}, ${n(min)} to ${n(max)}, ${perStudent ? 'per student' : 'per team'}`,
+  'preview.weight': ({ weight }: { weight: number }) => `counts ${n(weight)}×`,
   'preview.impact': ({ debates, results }: { debates: number; results: number }) =>
     debates === 1
       ? `There is one debate in this browser${results > 0 ? ', and it already has results' : ''}. It stays, but follows this setup from now on:`
@@ -340,6 +404,7 @@ export const en = {
   'debate.who.crossExam': ({ asking, answering }: { asking: string; answering: string }) =>
     `${asking} asks, ${answering} answers`,
   'debate.who.audienceQuestions': 'The audience and both teams',
+  'debate.who.jury': 'The jury',
   'debate.floor': ({ name }: { name: string }) => `${name} has the floor`,
   'debate.tapSpeaker': 'Tap the student who speaks.',
   'debate.tapFreeRound': 'Tap a name: that team’s clock runs.',
@@ -387,8 +452,32 @@ export const en = {
   'debate.finish': 'Finish debate',
   'debate.keys': 'Space: start or pause · ← →: previous or next step',
   'debate.clear': 'Clear step',
-  'debate.clear.question': 'Clear the time, the speakers or the votes of this step?',
+  'debate.clear.question': 'Clear the time, the speakers, the votes or the scores of this step?',
   'debate.clear.confirm': 'Clear',
+
+  // The jury step (#10): a score sheet per juror, filled in one after another.
+  'jury.prompt.team':
+    'Score each team on every criterion. Jurors take turns on this device: add one for each.',
+  'jury.prompt.student':
+    'Score each student on every criterion. Jurors take turns on this device: add one for each.',
+  'jury.jurors': 'Jurors',
+  'jury.juror': ({ number }: { number: number }) => `Juror ${n(number)}`,
+  'jury.add': 'Add juror',
+  'jury.name': 'Name of this juror (optional)',
+  'jury.remove': ({ juror }: { juror: string }) => `Remove ${juror}`,
+  'jury.remove.question': ({ juror }: { juror: string }) =>
+    `Remove ${juror}, with every score they gave?`,
+  'jury.remove.confirm': 'Remove juror',
+  'jury.sheet': ({ juror }: { juror: string }) => `Score sheet of ${juror}`,
+  'jury.student': ({ name, side }: { name: string; side: string }) => `${name} (${side})`,
+  'jury.weight': ({ weight }: { weight: number }) => `counts ${n(weight)}×`,
+  'jury.clearScore': ({ criterion, who }: { criterion: string; who: string }) =>
+    `Clear the score of ${who} for ${criterion}`,
+  'jury.total': 'Total',
+  'jury.notScored': 'Not scored yet.',
+  'jury.overview': 'Totals of all jurors',
+  'jury.average': 'Average',
+  'jury.noRubric': 'This format has no rubric to score on.',
 
   ...stepTypes,
   ...issues,

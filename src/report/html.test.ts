@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { DebateConfig } from '../model/config';
 import { GRAFFITI_PRESET } from '../model/presets';
-import { freeze, type AppState } from '../model/reducer';
+import { freeze, reducer, type AppState } from '../model/reducer';
 import { readReportText } from '../model/reportFile';
-import { playedPopperSession, playedSession } from '../test/playedSession';
+import { playedJurySession, playedPopperSession, playedSession } from '../test/playedSession';
 import { reportHtml } from './html';
 import { escapeHtml, markup, trusted } from './markup';
 
@@ -333,5 +333,146 @@ describe('the report of a Karl Popper debate (#8)', () => {
 
   it('has no prep time for a format without a bank', () => {
     expect(section(parse(make()), 1).querySelector('table.prep')).toBeNull();
+  });
+});
+
+describe('the report of a debate with a jury (#10)', () => {
+  const CRITERIA = ['Content and arguments', 'Rebuttal', 'Evidence and examples', 'Delivery'];
+
+  /** The tables of the jury's scores in debate 1, with their captions. */
+  function juryTables(doc: Document) {
+    return [...section(doc, 1).querySelectorAll('table.jury')].map((table) => ({
+      caption: text(table.querySelector('caption')),
+      rows: rows(table),
+    }));
+  }
+
+  it('gives the average of the jurors per criterion and in total, then each juror’s sheet', () => {
+    const doc = parse(make(playedJurySession()));
+    const debate = section(doc, 1);
+    expect([...debate.querySelectorAll('h3')].map(text)).toContain('Jury scores');
+    expect(text(debate.querySelector('h3 + p.bank'))).toBe(
+      'Each criterion is scored from 1 to 4; the highest total is 16.',
+    );
+    expect(juryTables(doc)).toEqual([
+      {
+        caption: 'Average of 2 jurors',
+        rows: [
+          ['Side', ...CRITERIA, 'Total'],
+          ['FOR', '3.5', '2.5', '3.5', '3.5', '13'],
+          ['AGAINST', '2.5', '3', '2.5', '2', '10'],
+        ],
+      },
+      {
+        caption: 'Juror 1',
+        rows: [
+          ['Side', ...CRITERIA, 'Total'],
+          ['FOR', '3', '2', '4', '3', '12'],
+          ['AGAINST', '2', '3', '3', '2', '10'],
+        ],
+      },
+      {
+        caption: 'Mr. Smith',
+        rows: [
+          ['Side', ...CRITERIA, 'Total'],
+          ['FOR', '4', '3', '3', '4', '14'],
+          ['AGAINST', '3', '3', '2', '2', '10'],
+        ],
+      },
+    ]);
+  });
+
+  it('has one table for one juror, and says so when nobody scored', () => {
+    const state = playedJurySession();
+    const open = reducer(state, { type: 'open-debate', debateId: 'd1', now: 0 });
+    const one = reducer(open, { type: 'remove-juror', jurorId: 'j2' });
+    expect(juryTables(parse(make(one))).map((table) => table.caption)).toEqual(['Juror 1']);
+
+    const none = reducer(one, { type: 'clear-step' });
+    const doc = parse(make(none));
+    expect(juryTables(doc)).toEqual([]);
+    expect(text(section(doc, 1).querySelector('h3 + p.bank + p'))).toBe('No scores.');
+  });
+
+  it('scores each student, with their side, and shows a weight', () => {
+    const state = playedJurySession();
+    const rubric = state.config.format.rubric;
+    if (rubric === undefined) throw new Error('no rubric');
+    const config: DebateConfig = {
+      ...state.config,
+      format: {
+        ...state.config.format,
+        rubric: {
+          ...rubric,
+          scope: 'student',
+          criteria: rubric.criteria.map((criterion) =>
+            criterion.id === 'delivery' ? { ...criterion, weight: 2 } : criterion,
+          ),
+        },
+      },
+    };
+    const scored = reducer(
+      reducer({ ...state, config }, { type: 'open-debate', debateId: 'd1', now: 0 }),
+      {
+        type: 'set-score',
+        jurorId: 'j1',
+        target: { side: 'con', slot: 1 },
+        criterionId: 'delivery',
+        score: 4,
+      },
+    );
+    expect(juryTables(parse(make(scored)))).toEqual([
+      {
+        caption: 'Juror 1',
+        rows: [
+          ['Student', ...CRITERIA.slice(0, 3), 'Delivery counts 2×', 'Total'],
+          ['Ann FOR', '—', '—', '—', '—', '—'],
+          ['Bert FOR', '—', '—', '—', '—', '—'],
+          ['Dirk AGAINST', '—', '—', '—', '—', '—'],
+          ['Eva AGAINST', '—', '—', '—', '4', '8'],
+        ],
+      },
+    ]);
+  });
+
+  it('is written in Dutch, decimal comma included', () => {
+    const state = playedJurySession();
+    const doc = parse(make(state, 'nl'));
+    const [average] = juryTables(doc);
+    expect(average.caption).toBe('Gemiddelde van 2 juryleden');
+    expect(average.rows[0].at(0)).toBe('Kant');
+    expect(average.rows[0].at(-1)).toBe('Totaal');
+    expect(average.rows[1]).toEqual(['FOR', '3,5', '2,5', '3,5', '3,5', '13']);
+    expect([...section(doc, 1).querySelectorAll('h3')].map(text)).toContain('Scores van de jury');
+  });
+
+  it('shows typed criteria and juror names as text', () => {
+    const state = playedJurySession();
+    const rubric = state.config.format.rubric;
+    if (rubric === undefined) throw new Error('no rubric');
+    const config: DebateConfig = {
+      ...state.config,
+      format: {
+        ...state.config.format,
+        rubric: {
+          ...rubric,
+          criteria: rubric.criteria.map((criterion, index) =>
+            index === 0 ? { ...criterion, label: XSS_NAME } : criterion,
+          ),
+        },
+      },
+    };
+    const named = reducer(
+      reducer({ ...state, config }, { type: 'open-debate', debateId: 'd1', now: 0 }),
+      { type: 'set-juror-name', jurorId: 'j2', name: BREAKOUT },
+    );
+    const html = make(named);
+    expect(html).not.toContain(XSS_NAME);
+    expect(html).not.toContain(BREAKOUT);
+    const doc = parse(html);
+    expect(doc.querySelectorAll('img, script:not([type="application/json"])')).toHaveLength(0);
+    const tables = juryTables(doc);
+    expect(tables[0].rows[0][1]).toBe(XSS_NAME);
+    expect(tables[2].caption).toBe(BREAKOUT);
   });
 });

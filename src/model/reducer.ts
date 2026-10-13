@@ -7,10 +7,20 @@ import {
   nextId,
   otherSide,
   type DebateConfig,
+  type Rubric,
   type Side,
   type Step,
   type Topic,
 } from './config';
+import {
+  addJuror,
+  clearJury,
+  removeJuror,
+  selectJuror,
+  setJurorName,
+  setScore,
+  type ScoreTarget,
+} from './jury';
 import {
   MAX_NAME_LENGTH,
   debateRunning,
@@ -38,7 +48,7 @@ import { clampVotes } from './votes';
 export interface AppState {
   /** The setup: format and topics. Shareable. */
   readonly config: DebateConfig;
-  /** What the class did with it: names, timings, votes. Private. */
+  /** What the class did with it: names, timings, votes, scores. Private. */
   readonly session: Session;
 }
 
@@ -90,6 +100,23 @@ export type Action =
    * teacher (`toggle-timer`, or a tap on a name), which in turn stops it.
    */
   | { readonly type: 'toggle-prep'; readonly side: Side; readonly now: number }
+  // The jury (#10) scores the open debate on the format's rubric. Scoring
+  // takes no time of its own: these need no `now`.
+  /** A juror's score for a team or a student on a criterion; `null` takes it back. */
+  | {
+      readonly type: 'set-score';
+      readonly jurorId: string;
+      readonly target: ScoreTarget;
+      readonly criterionId: string;
+      readonly score: number | null;
+    }
+  /** Another juror, after the others: their sheet opens. */
+  | { readonly type: 'add-juror' }
+  /** Open the sheet of another juror. */
+  | { readonly type: 'select-juror'; readonly jurorId: string }
+  | { readonly type: 'set-juror-name'; readonly jurorId: string; readonly name: string }
+  /** Take a juror off the jury, with their scores. */
+  | { readonly type: 'remove-juror'; readonly jurorId: string }
   /** Forget every debate, name and result; keep the setup. */
   | { readonly type: 'reset-session' }
   /**
@@ -210,13 +237,28 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'adjust-answers':
       return updateOpen(state, (open) => adjustAnswers(open, action.side, action.delta));
     case 'clear-step':
-      return updateOpen(state, (open) => withoutRecord(open.debate, open.step));
+      // The jury's scores are the debate's, not the step's: its step clears them all.
+      return updateOpen(state, (open) =>
+        open.step.type === 'jury' ? clearJury(open.debate) : withoutRecord(open.debate, open.step),
+      );
     case 'set-votes':
       return updateOpen(state, (open) => setVotes(open, action.side, action.value));
     case 'toggle-prep':
       return state.config.format.prepTime === undefined
         ? state
         : updateOpen(state, ({ debate }) => togglePrep(debate, action.side, action.now));
+    case 'set-score':
+      return updateJury(state, (debate, rubric) =>
+        setScore(rubric, debate, action.jurorId, action.target, action.criterionId, action.score),
+      );
+    case 'add-juror':
+      return updateJury(state, (debate) => addJuror(debate));
+    case 'select-juror':
+      return updateJury(state, (debate) => selectJuror(debate, action.jurorId));
+    case 'set-juror-name':
+      return updateJury(state, (debate) => setJurorName(debate, action.jurorId, action.name));
+    case 'remove-juror':
+      return updateJury(state, (debate) => removeJuror(debate, action.jurorId));
     case 'reset-session':
       return withSession(state, emptySession());
     case 'load-state':
@@ -255,6 +297,12 @@ function updateOpen(state: AppState, update: (open: OpenDebate) => Debate): AppS
   if (open === null) return state;
   const next = update(open);
   return next === open.debate ? state : replaceDebate(state, next);
+}
+
+/** A change to the jury of the open debate; none in a format without a rubric. */
+function updateJury(state: AppState, update: (debate: Debate, rubric: Rubric) => Debate): AppState {
+  const { rubric } = state.config.format;
+  return rubric === undefined ? state : updateOpen(state, ({ debate }) => update(debate, rubric));
 }
 
 function isSlot(slot: number, slots: number): boolean {
@@ -325,6 +373,7 @@ function toggleTimer({ debate, step }: OpenDebate, now: number): Debate {
     }
     case 'vote-before':
     case 'vote-after':
+    case 'jury':
       return debate;
   }
 }

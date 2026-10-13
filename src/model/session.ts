@@ -1,15 +1,23 @@
 // The private half of the model: the debates a class holds, with the
 // students' names and everything recorded while they debate (timings,
-// speakers, votes). A session stays in this browser (storage.ts) and in the
-// exported report. It is never part of a link or a config file: config.ts
-// cannot import anything from here.
+// speakers, votes, the jury's scores). A session stays in this browser
+// (storage.ts) and in the exported report. It is never part of a link or a
+// config file: config.ts cannot import anything from here.
 //
 // Topics and debates are separate, so one topic can be debated by several
 // groups. A debate refers to its topic and to the steps of the format by id;
 // what was recorded is kept per step id, so reordering the steps does not mix
 // up results.
 
-import { SIDES, otherSide, type Format, type Side, type Step, type VoteStep } from './config';
+import {
+  SIDES,
+  otherSide,
+  type Format,
+  type JuryStep,
+  type Side,
+  type Step,
+  type VoteStep,
+} from './config';
 import { IDLE_TIMER, isRunning, pauseTimer, type Timer } from './timer';
 import { NO_VOTES, voteShift, type Shift, type Votes } from './votes';
 
@@ -113,8 +121,44 @@ export interface PrepRecord {
 
 export const NO_PREP: PrepRecord = { clocks: { pro: IDLE_TIMER, con: IDLE_TIMER }, active: null };
 
+/**
+ * The scores of one juror (#10): per team or student (a `targetKey`), a
+ * score per criterion id. A criterion without an entry is not scored yet.
+ */
+export interface Juror {
+  readonly id: string;
+  /** As typed; may be empty, and then the juror goes by their number. */
+  readonly name: string;
+  readonly scores: Readonly<Record<string, Readonly<Record<string, number>>>>;
+}
+
+/**
+ * The jury of a debate (#10): the jurors, who fill in the score sheet one
+ * after another on the same device, and whose sheet is open. It belongs to
+ * the debate, not to a step, as the prep time does: a format has one jury
+ * step at most. Untouched, it has no jurors; the sheet then opens on a first
+ * juror (`juryOf`, jury.ts).
+ */
+export interface JuryRecord {
+  readonly jurors: readonly Juror[];
+  /** Id of the juror whose sheet is open; `null` when there are none. */
+  readonly current: string | null;
+}
+
+export const NO_JURY: JuryRecord = { jurors: [], current: null };
+
+/** Whether any juror gave any score. */
+export function juryUsed(jury: JuryRecord): boolean {
+  return jury.jurors.some((juror) =>
+    Object.values(juror.scores).some((scores) => Object.keys(scores).length > 0),
+  );
+}
+
+/** A kind of step that keeps a record per debate: all but the jury, whose scores are the debate's. */
+export type RecordedStep = Exclude<Step, JuryStep>;
+
 /** The record that belongs to a step of type `S['type']`. */
-export type RecordFor<S extends Step> = Extract<StepRecord, { readonly type: S['type'] }>;
+export type RecordFor<S extends RecordedStep> = Extract<StepRecord, { readonly type: S['type'] }>;
 
 export interface Debate {
   readonly id: string;
@@ -126,6 +170,8 @@ export interface Debate {
   readonly records: Readonly<Record<string, StepRecord>>;
   /** The prep time each team used; untouched (`NO_PREP`) in a format without a bank. */
   readonly prep: PrepRecord;
+  /** The jury's scores; untouched (`NO_JURY`) until a juror scores. */
+  readonly jury: JuryRecord;
   readonly done: boolean;
 }
 
@@ -148,6 +194,7 @@ export function newDebate(id: string, topicId: string, format: Format): Debate {
     step: 0,
     records: {},
     prep: NO_PREP,
+    jury: NO_JURY,
     done: false,
   };
 }
@@ -191,9 +238,14 @@ export function prepUsed(prep: PrepRecord): boolean {
   return SIDES.some((side) => prep.clocks[side].accMs > 0 || isRunning(prep.clocks[side]));
 }
 
-/** A debate has results once anything was recorded in it, or once it was finished. */
+/** A debate has results once anything was recorded or scored in it, or once it was finished. */
 export function hasResults(debate: Debate): boolean {
-  return debate.done || Object.keys(debate.records).length > 0 || prepUsed(debate.prep);
+  return (
+    debate.done ||
+    Object.keys(debate.records).length > 0 ||
+    prepUsed(debate.prep) ||
+    juryUsed(debate.jury)
+  );
 }
 
 /** Where a debate stands, as the list of debates says it. */
@@ -218,6 +270,15 @@ export function recordedStepIds(session: Session): Set<string> {
   return new Set(session.debates.flatMap((debate) => Object.keys(debate.records)));
 }
 
+/** Ids of criteria that some juror scored on in some debate; a new criterion must not take one. */
+export function scoredCriterionIds(session: Session): Set<string> {
+  return new Set(
+    session.debates.flatMap((debate) =>
+      debate.jury.jurors.flatMap((juror) => Object.values(juror.scores).flatMap(Object.keys)),
+    ),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Records
 // ---------------------------------------------------------------------------
@@ -234,7 +295,7 @@ export function emptyFreeRound(): FreeRoundRecord {
   };
 }
 
-function emptyRecord(step: Step): StepRecord {
+function emptyRecord(step: RecordedStep): StepRecord {
   switch (step.type) {
     case 'speech':
       return { type: 'speech', timer: IDLE_TIMER, speakers: [], current: null };
@@ -260,14 +321,18 @@ function emptyRecord(step: Step): StepRecord {
 }
 
 /** What was recorded for a step of this debate, or an empty record. */
-export function recordFor<S extends Step>(debate: Debate, step: S): RecordFor<S> {
+export function recordFor<S extends RecordedStep>(debate: Debate, step: S): RecordFor<S> {
   const stored = Object.hasOwn(debate.records, step.id) ? debate.records[step.id] : undefined;
   // A record of another type is left over from before the step was edited.
   const record = stored !== undefined && stored.type === step.type ? stored : emptyRecord(step);
   return record as RecordFor<S>;
 }
 
-export function withRecord<S extends Step>(debate: Debate, step: S, record: RecordFor<S>): Debate {
+export function withRecord<S extends RecordedStep>(
+  debate: Debate,
+  step: S,
+  record: RecordFor<S>,
+): Debate {
   return { ...debate, records: { ...debate.records, [step.id]: record } };
 }
 
@@ -351,8 +416,8 @@ export interface StepClock {
 
 /**
  * The clocks of a step in this debate: one for a speech or a consultation, one
- * per team in a free round (a chess clock), none for a vote. At most one of
- * them runs.
+ * per team in a free round (a chess clock), none for a vote or the jury. At
+ * most one of them runs.
  */
 export function clocksOf(debate: Debate, step: Step): readonly StepClock[] {
   switch (step.type) {
@@ -367,6 +432,7 @@ export function clocksOf(debate: Debate, step: Step): readonly StepClock[] {
     }
     case 'vote-before':
     case 'vote-after':
+    case 'jury':
       return [];
   }
 }

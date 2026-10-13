@@ -729,6 +729,315 @@
   color: var(--ink);
 }
 
+/* ── the jury: a score sheet per juror (#10) ───────────── */
+
+.jury {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* The jurors on the left; the open one's name, and taking them off, on the right. */
+.jurors {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-5);
+}
+
+.jurorList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* Another juror: a hairline button on ink, quieter than the jurors' names. */
+.addJuror {
+  appearance: none;
+  min-height: 3rem;
+  margin: 0;
+  padding: 0.55rem 1.1rem;
+  border: var(--border-width) dashed var(--on-ink-muted);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--on-ink);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  font-weight: var(--body-weight-strong);
+  line-height: 1.1;
+  cursor: pointer;
+}
+
+.addJuror:hover:not([aria-disabled='true']) {
+  border-color: var(--on-ink);
+}
+
+.addJuror[aria-disabled='true'] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.jurorTools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2) var(--space-4);
+}
+
+.jurorField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: min(100%, 24rem);
+}
+
+.jurorLabel {
+  font-family: var(--font-mono);
+  letter-spacing: var(--label-tracking-tight);
+  text-transform: uppercase;
+  color: var(--on-ink-muted);
+}
+
+.jurorName {
+  width: 100%;
+  min-height: 2.75rem;
+  margin: 0;
+  padding: 0.4rem 0;
+  border: 0;
+  border-bottom: var(--border-width) solid var(--on-ink-muted);
+  border-radius: 0;
+  background: transparent;
+  color: var(--on-ink);
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+}
+
+.jurorName:hover {
+  border-bottom-color: var(--on-ink);
+}
+
+/* A quiet mono action on ink, such as taking a juror off. */
+.stage .inkGhost {
+  color: var(--on-ink);
+}
+
+/* A sheet per team or student: side by side where there is room. */
+.sheets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+  gap: var(--space-3) var(--space-4);
+}
+
+.sheet {
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-3) var(--space-4) var(--space-3);
+  border: var(--border-width) solid var(--hairline-on-ink);
+  border-radius: var(--radius);
+}
+
+/* Inside the box rather than on its border. */
+.sheetName {
+  float: left;
+  width: 100%;
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  font-weight: var(--label-weight-strong);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+
+.criteria {
+  display: flex;
+  clear: both;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.criterion {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.criterionName {
+  float: left;
+  width: 100%;
+  margin: 0 0 var(--space-1);
+  padding: 0;
+  font-weight: var(--body-weight-strong);
+  overflow-wrap: anywhere;
+}
+
+.criterionWeight {
+  font-family: var(--font-mono);
+  font-weight: var(--label-weight);
+  letter-spacing: var(--label-tracking-tight);
+  color: var(--on-ink-muted);
+}
+
+.levels {
+  display: flex;
+  clear: both;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* A level of the scale: the native radio button lies over its square, so it
+   keeps the clicks, the focus and the arrow keys. */
+.level {
+  position: relative;
+  display: inline-grid;
+}
+
+.levelInput {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.levelMark {
+  display: grid;
+  place-items: center;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0 var(--space-2);
+  border: var(--border-width) solid var(--on-ink-muted);
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  font-weight: var(--label-weight-strong);
+  line-height: 1;
+  transition:
+    background-color var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard);
+}
+
+.level:hover .levelMark {
+  border-color: var(--on-ink);
+}
+
+.levelInput:checked + .levelMark {
+  border-color: var(--on-ink);
+  background: var(--on-ink);
+  color: var(--ink);
+}
+
+.levelInput:focus-visible + .levelMark {
+  outline: 2px solid var(--magenta-on-dark);
+  outline-offset: 2px;
+}
+
+/* What the chosen score means; a line kept free while none is chosen. */
+.levelText {
+  min-height: 1.5em;
+  margin: var(--space-1) 0 0;
+  color: var(--on-ink-muted);
+}
+
+.sheetTotal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 var(--space-3);
+  margin: var(--space-3) 0 0;
+  padding-top: var(--space-2);
+  border-top: var(--border-width) solid var(--hairline-on-ink);
+  font-family: var(--font-mono);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+}
+
+.sheetTotalValue {
+  font-size: 1.75rem;
+  font-weight: var(--label-weight-strong);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+/* Every juror's total, and the average: below the sheets. */
+.overview {
+  min-width: 0;
+  padding-top: var(--space-3);
+  border-top: var(--border-width) solid var(--hairline-on-ink);
+}
+
+.overviewTitle {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  font-weight: var(--label-weight);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--on-ink-muted);
+}
+
+/* Many jurors scroll sideways rather than widen the page. */
+.overviewScroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.overviewTable {
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.overviewTable th,
+.overviewTable td {
+  padding: var(--space-2) var(--space-5) var(--space-2) 0;
+  border-bottom: var(--border-width) solid var(--hairline-on-ink);
+  text-align: right;
+}
+
+.overviewTable th:last-child,
+.overviewTable td:last-child {
+  padding-right: 0;
+}
+
+/* The figures stay on one line; names wrap before the table scrolls. */
+.overviewTable td {
+  white-space: nowrap;
+}
+
+.overviewTable th:first-child {
+  text-align: left;
+}
+
+.overviewTable thead th {
+  font-family: var(--font-mono);
+  font-weight: var(--label-weight);
+  letter-spacing: var(--label-tracking-tight);
+  color: var(--on-ink-muted);
+}
+
+.overviewTable tbody th {
+  font-weight: var(--body-weight-strong);
+}
+
+.overviewAverage {
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  font-weight: var(--label-weight-strong);
+}
+
 /* ── the controls, always in reach ─────────────────────── */
 
 .controls {
@@ -828,5 +1137,10 @@
 
   .prepButton {
     min-width: 7.5rem;
+  }
+
+  .overviewTable th,
+  .overviewTable td {
+    padding-right: var(--space-3);
   }
 }

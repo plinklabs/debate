@@ -1,9 +1,10 @@
 // The shareable half of the model: a debate *format* (side labels, team size,
-// the ordered steps) and the *topics* to debate. This is what goes into a link
-// or a .json file (#5), so it holds nothing about a particular class: no
-// names, timings, votes or scores. Those live in session.ts, which imports from
-// here and never the other way round; boundaries.test.ts checks that no
-// shareable module can reach the session modules.
+// the ordered steps, the jury's rubric) and the *topics* to debate. This is
+// what goes into a link or a .json file (#5), so it holds nothing about a
+// particular class: no names, timings, votes or scores. Those live in
+// session.ts, which imports from here and never the other way round;
+// boundaries.test.ts checks that no shareable module can reach the session
+// modules.
 //
 // Configs from outside (a link, a file) go through `parseConfig` in
 // validate.ts before they are used.
@@ -77,6 +78,14 @@ export interface VoteAfterStep extends StepBase {
 }
 
 /**
+ * The jury scores the teams, or each student, on the format's rubric (#10).
+ * No timer. At most one per format, and only in a format with a rubric.
+ */
+export interface JuryStep extends StepBase {
+  readonly type: 'jury';
+}
+
+/**
  * One step of a format, discriminated on `type`. A new kind of step is a new
  * member here with its own fields; the switches over `type` in the model then
  * fail to compile until they handle it.
@@ -88,7 +97,8 @@ export type Step =
   | CrossExaminationStep
   | AudienceQuestionsStep
   | VoteBeforeStep
-  | VoteAfterStep;
+  | VoteAfterStep
+  | JuryStep;
 
 export type StepType = Step['type'];
 
@@ -106,6 +116,7 @@ const STEP_TYPE_SET: Readonly<Record<StepType, true>> = {
   'audience-questions': true,
   'vote-before': true,
   'vote-after': true,
+  jury: true,
 };
 
 export const STEP_TYPES = Object.keys(STEP_TYPE_SET) as readonly StepType[];
@@ -128,6 +139,45 @@ export interface PrepTime {
   readonly secondsPerTeam: number;
 }
 
+/** Who the jury scores (#10): each team as a whole, or each student. */
+export type RubricScope = 'team' | 'student';
+
+export const RUBRIC_SCOPES: readonly RubricScope[] = ['team', 'student'];
+
+/** The points a jury gives on every criterion: whole numbers from `min` to `max`. */
+export interface RubricScale {
+  readonly min: number;
+  readonly max: number;
+}
+
+/** One thing the jury scores, such as the arguments or the delivery. */
+export interface RubricCriterion {
+  /** Stable key of this criterion's scores in a session. */
+  readonly id: string;
+  /** Teacher content, so not translated; never blank. */
+  readonly label: string;
+  /** What a score on this criterion counts for in the total: 1 unless set. */
+  readonly weight: number;
+  /**
+   * A line per level of the scale, from `scale.min` up: what that score
+   * means. A level without one has `''`, and the list may stop before the
+   * top of the scale; it is empty when the levels are not described.
+   */
+  readonly levels: readonly string[];
+}
+
+/**
+ * How the jury scores (#10): the criteria, the scale and who is scored. A
+ * score is per juror, per team or student, per criterion; the total weighs
+ * each criterion's score, and several jurors are averaged (jury.ts). The
+ * scores themselves are session data.
+ */
+export interface Rubric {
+  readonly scale: RubricScale;
+  readonly scope: RubricScope;
+  readonly criteria: readonly RubricCriterion[];
+}
+
 export interface Format {
   /** What each side is called on screen (VOOR/TEGEN, Pro/Contra, …). */
   readonly sides: Readonly<Record<Side, string>>;
@@ -138,6 +188,12 @@ export interface Format {
    * before #8, reads and shares exactly as it did.
    */
   readonly prepTime?: PrepTime;
+  /**
+   * The rubric of the jury step (#10), or no field at all for a format
+   * without one, as with `prepTime`. A format may have a rubric and no jury
+   * step yet, but not a jury step without a rubric.
+   */
+  readonly rubric?: Rubric;
   readonly steps: readonly Step[];
 }
 
@@ -166,6 +222,13 @@ export const LIMITS = {
   stepLabelLength: 60,
   sideLabelLength: 30,
   idLength: 40,
+  /** Points on a rubric's scale: both ends lie in here, and the lower one below the upper one. */
+  rubricScale: { min: 0, max: 10 },
+  criteria: { min: 1, max: 10 },
+  criterionWeight: { min: 1, max: 10 },
+  criterionLabelLength: 60,
+  /** A level's description is one line. */
+  levelLength: 120,
 } as const;
 
 // Letters, digits and dashes, starting with a letter or digit. Ids become
@@ -195,6 +258,7 @@ export function stepSeconds(step: Step): number | null {
       return step.seconds;
     case 'vote-before':
     case 'vote-after':
+    case 'jury':
       return null;
   }
 }
@@ -211,6 +275,7 @@ export function stepTotalSeconds(step: Step): number {
       return step.seconds * 2;
     case 'vote-before':
     case 'vote-after':
+    case 'jury':
       return 0;
   }
 }
@@ -222,8 +287,9 @@ export function formatTotalSeconds(format: Format): number {
 }
 
 /**
- * The side a step belongs to, or `null` for a step of both teams or of the
- * audience. A cross-examination belongs to the side that asks: its clock is theirs.
+ * The side a step belongs to, or `null` for a step of both teams, of the
+ * audience or of the jury. A cross-examination belongs to the side that
+ * asks: its clock is theirs.
  */
 export function stepSide(step: Step): Side | null {
   switch (step.type) {
@@ -236,6 +302,20 @@ export function stepSide(step: Step): Side | null {
     case 'audience-questions':
     case 'vote-before':
     case 'vote-after':
+    case 'jury':
       return null;
   }
+}
+
+/** How many levels a rubric's scale has: 4 for 1 to 4. */
+export function scaleLevels(scale: RubricScale): number {
+  return scale.max - scale.min + 1;
+}
+
+/** The most a team or a student can score on this rubric: every criterion at the top, weighed. */
+export function rubricMaxTotal(rubric: Rubric): number {
+  return rubric.criteria.reduce(
+    (total, criterion) => total + criterion.weight * rubric.scale.max,
+    0,
+  );
 }

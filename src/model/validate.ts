@@ -10,12 +10,18 @@
 import {
   CONFIG_VERSION,
   LIMITS,
+  RUBRIC_SCOPES,
   SIDES,
   isStepType,
   isValidId,
+  scaleLevels,
   type DebateConfig,
   type Format,
   type PrepTime,
+  type Rubric,
+  type RubricCriterion,
+  type RubricScale,
+  type RubricScope,
   type Side,
   type Step,
   type StepType,
@@ -89,7 +95,18 @@ export type ConfigIssue =
       readonly max: number;
     }
   /** The vote after comes before the vote before. */
-  | { readonly code: 'vote-order'; readonly path: IssuePath };
+  | { readonly code: 'vote-order'; readonly path: IssuePath }
+  /** A rubric's scope that is neither `team` nor `student` (#10). */
+  | { readonly code: 'unknown-scope'; readonly path: IssuePath; readonly scope: string }
+  /** A rubric's scale whose lowest score is not below its highest. */
+  | {
+      readonly code: 'scale-order';
+      readonly path: IssuePath;
+      readonly min: number;
+      readonly max: number;
+    }
+  /** A jury step in a format without a rubric: there would be nothing to score on. */
+  | { readonly code: 'jury-without-rubric'; readonly path: IssuePath };
 
 export type ConfigIssueCode = ConfigIssue['code'];
 
@@ -304,11 +321,23 @@ function readFormat(root: Json, issues: Issues): Format | undefined {
   const sides = readSides(format, path, issues);
   const teamSize = readTeamSize(format, path, issues);
   const prepTime = readPrepTime(format, path, issues);
+  const rubric = readRubric(format, path, issues);
   const steps = readSteps(format, path, issues);
+  if (steps !== undefined && rubric === null) {
+    // A rubric without a jury step waits for one; a jury step without a rubric has nothing to score.
+    const jury = steps.findIndex((step) => step.type === 'jury');
+    if (jury >= 0) issues.push({ code: 'jury-without-rubric', path: [...path, 'steps', jury] });
+  }
   if (sides === undefined || teamSize === undefined || steps === undefined) return undefined;
-  if (prepTime === undefined) return undefined;
-  // No bank, no field: a format without one reads as it did before #8.
-  return prepTime === null ? { sides, teamSize, steps } : { sides, teamSize, prepTime, steps };
+  if (prepTime === undefined || rubric === undefined) return undefined;
+  // No bank or no rubric, no field: a format without them reads as it did before #8 and #10.
+  return {
+    sides,
+    teamSize,
+    ...(prepTime === null ? {} : { prepTime }),
+    ...(rubric === null ? {} : { rubric }),
+    steps,
+  };
 }
 
 /**
@@ -325,6 +354,123 @@ function readPrepTime(format: Json, path: IssuePath, issues: Issues): PrepTime |
   }
   const secondsPerTeam = readInteger(value, 'secondsPerTeam', at, issues, LIMITS.prepSeconds);
   return secondsPerTeam === undefined ? undefined : { secondsPerTeam };
+}
+
+/**
+ * The jury's rubric (#10): `null` when the format has none, which is when the
+ * field is missing (as in every config from before #10) or `null`.
+ */
+function readRubric(format: Json, path: IssuePath, issues: Issues): Rubric | null | undefined {
+  const value = Object.hasOwn(format, 'rubric') ? format.rubric : undefined;
+  if (value === undefined || value === null) return null;
+  const at = [...path, 'rubric'];
+  if (!isObject(value)) {
+    issues.push({ code: 'wrong-type', path: at, expected: 'object' });
+    return undefined;
+  }
+  const scale = readScale(value, at, issues);
+  const scope = readScope(value, at, issues);
+  const criteria = readCriteria(value, at, issues, scale);
+  if (scale === undefined || scope === undefined || criteria === undefined) return undefined;
+  return { scale, scope, criteria };
+}
+
+function readScale(rubric: Json, path: IssuePath, issues: Issues): RubricScale | undefined {
+  const scale = readObject(rubric, 'scale', path, issues);
+  if (scale === undefined) return undefined;
+  const at = [...path, 'scale'];
+  const min = readInteger(scale, 'min', at, issues, LIMITS.rubricScale);
+  const max = readInteger(scale, 'max', at, issues, LIMITS.rubricScale);
+  if (min === undefined || max === undefined) return undefined;
+  if (min >= max) {
+    issues.push({ code: 'scale-order', path: at, min, max });
+    return undefined;
+  }
+  return { min, max };
+}
+
+function readScope(rubric: Json, path: IssuePath, issues: Issues): RubricScope | undefined {
+  const value = field(rubric, 'scope', path, issues);
+  if (value === undefined) return undefined;
+  const at = [...path, 'scope'];
+  if (typeof value !== 'string') {
+    issues.push({ code: 'wrong-type', path: at, expected: 'string' });
+    return undefined;
+  }
+  const scope = RUBRIC_SCOPES.find((candidate) => candidate === value);
+  if (scope === undefined) issues.push({ code: 'unknown-scope', path: at, scope: value });
+  return scope;
+}
+
+/** The criteria. A valid `scale` bounds how many levels each one describes. */
+function readCriteria(
+  rubric: Json,
+  path: IssuePath,
+  issues: Issues,
+  scale: RubricScale | undefined,
+): RubricCriterion[] | undefined {
+  const list = readList(rubric, 'criteria', path, issues, LIMITS.criteria);
+  if (list === undefined) return undefined;
+  const at = [...path, 'criteria'];
+  const before = issues.length;
+  const levels = scaleLevels(scale ?? LIMITS.rubricScale);
+  const criteria = list.map((item, index) => readCriterion(item, [...at, index], issues, levels));
+  checkUniqueIds(criteria, at, issues);
+  return issues.length > before ? undefined : criteria.filter(isDefined);
+}
+
+function readCriterion(
+  value: unknown,
+  path: IssuePath,
+  issues: Issues,
+  levelCount: number,
+): RubricCriterion | undefined {
+  if (!isObject(value)) {
+    issues.push({ code: 'wrong-type', path, expected: 'object' });
+    return undefined;
+  }
+  const id = readId(value, 'id', path, issues);
+  const label = readText(value, 'label', path, issues, {
+    max: LIMITS.criterionLabelLength,
+    blank: 'not-allowed',
+  });
+  // Both optional: without a weight a criterion counts once, without levels none is described.
+  const weight = Object.hasOwn(value, 'weight')
+    ? readInteger(value, 'weight', path, issues, LIMITS.criterionWeight)
+    : 1;
+  const levels = Object.hasOwn(value, 'levels') ? readLevels(value, path, issues, levelCount) : [];
+  if (id === undefined || label === undefined || weight === undefined) return undefined;
+  if (levels === undefined) return undefined;
+  return { id, label, weight, levels };
+}
+
+/** A line per level, at most one for each level of the scale; a blank one describes none. */
+function readLevels(
+  criterion: Json,
+  path: IssuePath,
+  issues: Issues,
+  levelCount: number,
+): string[] | undefined {
+  const list = readList(criterion, 'levels', path, issues, { min: 0, max: levelCount });
+  if (list === undefined) return undefined;
+  const at = [...path, 'levels'];
+  const before = issues.length;
+  const levels = list.map((value, index) => {
+    if (typeof value !== 'string') {
+      issues.push({ code: 'wrong-type', path: [...at, index], expected: 'string' });
+      return '';
+    }
+    if (value.length > LIMITS.levelLength) {
+      issues.push({
+        code: 'too-long',
+        path: [...at, index],
+        length: value.length,
+        max: LIMITS.levelLength,
+      });
+    }
+    return value;
+  });
+  return issues.length > before ? undefined : levels;
 }
 
 function readSides(
@@ -355,6 +501,13 @@ function readTeamSize(format: Json, path: IssuePath, issues: Issues): TeamSize |
   return { min, max };
 }
 
+/** Kinds of step that a format has at most one of. */
+const ONCE_PER_FORMAT: ReadonlySet<StepType> = new Set<StepType>([
+  'vote-before',
+  'vote-after',
+  'jury',
+]);
+
 function readSteps(format: Json, path: IssuePath, issues: Issues): Step[] | undefined {
   const list = readList(format, 'steps', path, issues, LIMITS.steps);
   if (list === undefined) return undefined;
@@ -364,10 +517,11 @@ function readSteps(format: Json, path: IssuePath, issues: Issues): Step[] | unde
 
   checkUniqueIds(steps, at, issues);
 
-  // The vote shift compares one vote before with one vote after.
+  // The vote shift compares one vote before with one vote after, and the
+  // jury's scores are the debate's: at most one step of each.
   const firstOf = new Map<StepType, number>();
   steps.forEach((step, index) => {
-    if (step === undefined || (step.type !== 'vote-before' && step.type !== 'vote-after')) return;
+    if (step === undefined || !ONCE_PER_FORMAT.has(step.type)) return;
     if (firstOf.has(step.type)) {
       issues.push({
         code: 'duplicate-step-type',
@@ -427,6 +581,7 @@ function readStep(value: unknown, path: IssuePath, issues: Issues): Step | undef
     }
     case 'vote-before':
     case 'vote-after':
+    case 'jury':
       if (id === undefined || label === undefined) return undefined;
       return { id, type, label };
   }

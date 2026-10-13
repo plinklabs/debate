@@ -11,7 +11,8 @@
 import { stepName, stepWho } from '../debate/stepText';
 import { DICTIONARIES, translator, type Translate } from '../i18n/dictionary';
 import { formatDate, formatNumber } from '../i18n/format';
-import { SIDES, otherSide, stepSeconds, type Format } from '../model/config';
+import { SIDES, otherSide, rubricMaxTotal, stepSeconds, type Format } from '../model/config';
+import type { Sheet } from '../model/jury';
 import type { Locale } from '../model/locale';
 import type { AppState } from '../model/reducer';
 import {
@@ -21,8 +22,11 @@ import {
   type ClockResult,
   type DebateResult,
   type FreeRoundResult,
+  type JurorResult,
+  type JuryResult,
   type MemberResult,
   type PrepResult,
+  type ScoredResult,
   type StepResult,
   type VoteResult,
 } from '../model/report';
@@ -98,8 +102,8 @@ ${whoSpoke(debate, c)}${times(debate, c)}${prep(debate.prep, c)}${debate.steps.m
 }
 
 // ---------------------------------------------------------------------------
-// Steps. The switches below cover every kind of step: a new kind, such as a
-// jury step with scores (#10), needs a case in each before this compiles.
+// Steps. The switches below cover every kind of step: a new kind needs a case
+// in each before this compiles.
 // ---------------------------------------------------------------------------
 
 /** The rows of a step in the table of times: one per clock, none for a step without one. */
@@ -143,6 +147,9 @@ function timeRows(result: StepResult, number: number, c: Context): Markup | null
     case 'vote-after':
       // No clock: the votes have a section of their own (`vote`).
       return null;
+    case 'jury':
+      // No clock: the scores have a section of their own (`stepSection`).
+      return null;
   }
 }
 
@@ -153,6 +160,8 @@ function stepSection(result: StepResult, c: Context): Markup | null {
       return balance(result, c);
     case 'audience-questions':
       return answers(result, c);
+    case 'jury':
+      return jury(result, c);
     case 'speech':
     case 'consultation':
     case 'cross-examination':
@@ -295,6 +304,93 @@ function answers(result: AudienceQuestionsResult, c: Context): Markup {
 ${rows}</tbody>
 </table>
 `;
+}
+
+/**
+ * The jury's scores (#10): per team or student, the score on each criterion
+ * and the weighted total. With several jurors, the average first, then each
+ * juror's own sheet.
+ */
+function jury(result: JuryResult, c: Context): Markup {
+  const { t } = c;
+  const { rubric, jurors } = result;
+  const heading = markup`<h3>${t('report.jury')}</h3>
+`;
+  if (rubric === null)
+    return markup`${heading}<p class="quiet">${t('jury.noRubric')}</p>
+`;
+  const scale = t('report.jury.scale', {
+    min: rubric.scale.min,
+    max: rubric.scale.max,
+    total: rubricMaxTotal(rubric),
+  });
+  const intro = markup`${heading}<p class="bank">${scale}</p>
+`;
+  if (jurors.length === 0) {
+    return markup`${intro}<p class="quiet">${t('report.jury.none')}</p>
+`;
+  }
+  if (jurors.length === 1) {
+    return markup`${intro}${scoreTable(result, jurorName(jurors[0], c), (scored) => scored.sheets[0], c)}`;
+  }
+  const average = t('report.jury.average', { count: jurors.length });
+  return markup`${intro}${scoreTable(result, average, (scored) => scored.average, c)}${jurors.map(
+    (juror, index) => scoreTable(result, jurorName(juror, c), (scored) => scored.sheets[index], c),
+  )}`;
+}
+
+function jurorName(juror: JurorResult, { t }: Context): string {
+  return juror.name === '' ? t('jury.juror', { number: juror.number }) : juror.name;
+}
+
+/**
+ * A row per team or student, a column per criterion and the total. In a box
+ * of its own that scrolls sideways on a narrow screen: ten criteria do not
+ * fit on a phone.
+ */
+function scoreTable(
+  result: JuryResult,
+  caption: string,
+  sheetOf: (scored: ScoredResult) => Sheet,
+  c: Context,
+): Markup | null {
+  const { t, format } = c;
+  const { rubric } = result;
+  if (rubric === null) return null;
+  const score = (value: number | null) => (value === null ? '—' : decimal(value, c));
+  const heads = rubric.criteria.map((criterion) => {
+    const weight =
+      criterion.weight === 1
+        ? null
+        : markup` <span class="who">${t('jury.weight', { weight: criterion.weight })}</span>`;
+    return markup`<th scope="col" class="num">${criterion.label}${weight}</th>`;
+  });
+  const rows = result.scored.map((scored) => {
+    const sheet = sheetOf(scored);
+    const side = format.sides[scored.side];
+    const who =
+      scored.member === null
+        ? markup`${side}`
+        : markup`${scored.member.name} <span class="who">${side}</span>`;
+    const cells = sheet.scores.map((value) => markup`<td class="num">${score(value)}</td>`);
+    return markup`<tr><th scope="row">${who}</th>${cells}<td class="num total">${score(sheet.total)}</td></tr>
+`;
+  });
+  const first = rubric.scope === 'team' ? t('report.side') : t('report.student');
+  return markup`<div class="wide">
+<table class="jury">
+<caption>${caption}</caption>
+<thead><tr><th scope="col">${first}</th>${heads}<th scope="col" class="num">${t('jury.total')}</th></tr></thead>
+<tbody>
+${rows}</tbody>
+</table>
+</div>
+`;
+}
+
+/** A score or an average: up to two decimals, in the language's way. */
+function decimal(value: number, { locale }: Context): string {
+  return formatNumber(locale, value, { maximumFractionDigits: 2 });
 }
 
 /** Each team's prep time: what it used of its bank, what was left, and any overtime. */

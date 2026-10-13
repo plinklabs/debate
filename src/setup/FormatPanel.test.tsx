@@ -1,9 +1,10 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { setTopicText } from '../model/edit';
-import { GRAFFITI_PRESET, KARL_POPPER_PRESET } from '../model/presets';
+import { GRAFFITI_PRESET, KARL_POPPER_PRESET, standardRubric } from '../model/presets';
 import { initialState, type AppState } from '../model/reducer';
 import { newDebate } from '../model/session';
+import { graffitiWithJury } from '../test/playedSession';
 import { renderSetup } from '../test/setupScreen';
 
 const english = GRAFFITI_PRESET.build('en');
@@ -331,7 +332,7 @@ describe('the format', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Dit sjabloon gebruiken' }));
     expect(screen.getByRole('group', { name: 'Dit sjabloon gebruiken' })).toHaveTextContent(
-      'Dit vervangt de kanten, de teamgrootte, de voorbereidingstijd en alle stappen.',
+      'Dit vervangt de kanten, de teamgrootte, de voorbereidingstijd, het beoordelingsraster en alle stappen.',
     );
     expect(screen.getByRole('button', { name: 'Annuleren' })).toHaveFocus();
     fireEvent.click(screen.getByRole('button', { name: 'Debatvorm vervangen' }));
@@ -359,5 +360,171 @@ describe('the format', () => {
     });
     expect(title).toHaveValue('');
     expect(title).toHaveAttribute('placeholder', 'Overleg');
+  });
+});
+
+describe('the jury rubric (#10)', () => {
+  const rubricGroup = () => within(screen.getByRole('group', { name: 'Jury rubric' }));
+  const criterion = (number: number) =>
+    within(rubricGroup().getByRole('group', { name: `Criterion ${number}` }));
+  const kindOf = (number: number) => within(step(number)).getByRole('combobox', { name: 'Kind' });
+  const juryOption = (number: number) =>
+    within(kindOf(number)).getByRole('option', { name: 'Jury' });
+
+  it('offers the standard rubric or one of your own, and a jury step only once there is a rubric', () => {
+    renderSetup({ tab: 'format' });
+    expect(rubricGroup().getByRole('button', { name: 'Add standard rubric' })).toBeEnabled();
+    expect(rubricGroup().getByRole('button', { name: 'Custom rubric' })).toBeEnabled();
+    expect(rubricGroup().queryByRole('spinbutton')).not.toBeInTheDocument();
+    expect(juryOption(10)).toBeDisabled();
+  });
+
+  it('adds the standard rubric in the UI language, then a jury step at the end', () => {
+    const { state } = renderSetup({
+      tab: 'format',
+      locale: 'nl',
+      initial: initialState(GRAFFITI_PRESET.build('nl')),
+    });
+    const group = within(screen.getByRole('group', { name: 'Beoordelingsraster' }));
+    fireEvent.click(group.getByRole('button', { name: 'Standaardraster toevoegen' }));
+    expect(state().config.format.rubric).toEqual(standardRubric('nl'));
+    expect(group.getByRole('spinbutton', { name: 'Laagste score' })).toHaveFocus();
+    expect(group.getByRole('spinbutton', { name: 'Hoogste score' })).toHaveValue(4);
+    expect(group.getByText('Hoogste totaal: 16')).toBeInTheDocument();
+    expect(
+      within(group.getByRole('group', { name: 'Criterium 1' })).getByRole('textbox', {
+        name: 'Naam',
+      }),
+    ).toHaveValue('Inhoud en argumenten');
+    expect(group.getByText(/^Nog geen stap scoort erop/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stap toevoegen' }));
+    const kind = within(screen.getByRole('group', { name: 'Stap 11' })).getByRole('combobox', {
+      name: 'Soort',
+    });
+    fireEvent.change(kind, { target: { value: 'jury' } });
+    expect(state().config.format.steps.at(-1)).toEqual({ id: 's1', type: 'jury', label: '' });
+    expect(
+      within(screen.getByRole('group', { name: 'Stap 11' })).getByText(
+        'De jury scoort op het beoordelingsraster. Geen klok.',
+      ),
+    ).toBeInTheDocument();
+    // One jury at most.
+    expect(
+      within(
+        within(screen.getByRole('group', { name: 'Stap 2' })).getByRole('combobox', {
+          name: 'Soort',
+        }),
+      ).getByRole('option', { name: 'Juryoordeel' }),
+    ).toBeDisabled();
+    // The rubric stays while the step scores on it.
+    expect(group.queryByRole('button', { name: 'Raster verwijderen' })).not.toBeInTheDocument();
+    expect(group.getByText(/^Een stap ‘Juryoordeel’ scoort op dit raster/)).toBeInTheDocument();
+  });
+
+  it('makes a rubric of one’s own: scale, who is scored, criteria, weights and levels', () => {
+    const { state } = renderSetup({ tab: 'format' });
+    fireEvent.click(rubricGroup().getByRole('button', { name: 'Custom rubric' }));
+    expect(state().config.format.rubric).toEqual({
+      scale: { min: 1, max: 4 },
+      scope: 'team',
+      criteria: [{ id: 'c1', label: 'New criterion', weight: 1, levels: [] }],
+    });
+    // One criterion stays.
+    expect(rubricGroup().getByRole('button', { name: 'Remove criterion 1' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+
+    fireEvent.change(criterion(1).getByRole('textbox', { name: 'Name' }), {
+      target: { value: 'Teamwork' },
+    });
+    fireEvent.change(criterion(1).getByRole('spinbutton', { name: 'Weight' }), {
+      target: { value: '0' },
+    });
+    expect(criterion(1).getByRole('spinbutton', { name: 'Weight' })).toHaveAccessibleDescription(
+      '0 is not between 1 and 10.',
+    );
+    fireEvent.change(criterion(1).getByRole('spinbutton', { name: 'Weight' }), {
+      target: { value: '3' },
+    });
+    fireEvent.change(criterion(1).getByRole('textbox', { name: 'Score 2' }), {
+      target: { value: 'Works alone' },
+    });
+    fireEvent.change(rubricGroup().getByRole('combobox', { name: 'Scored' }), {
+      target: { value: 'student' },
+    });
+    fireEvent.change(rubricGroup().getByRole('spinbutton', { name: 'Highest score' }), {
+      target: { value: '5' },
+    });
+    expect(rubricGroup().getByText('Highest total: 15')).toBeInTheDocument();
+    fireEvent.click(rubricGroup().getByRole('button', { name: 'Add criterion' }));
+    expect(criterion(2).getByRole('textbox', { name: 'Name' })).toHaveFocus();
+    fireEvent.click(rubricGroup().getByRole('button', { name: 'Move criterion 2 up' }));
+
+    expect(state().config.format.rubric).toEqual({
+      scale: { min: 1, max: 5 },
+      scope: 'student',
+      criteria: [
+        { id: 'c2', label: 'New criterion', weight: 1, levels: [] },
+        { id: 'c1', label: 'Teamwork', weight: 3, levels: ['', 'Works alone'] },
+      ],
+    });
+  });
+
+  it('refuses a scale whose lowest score is not below its highest', () => {
+    const { state } = renderSetup({ tab: 'format' });
+    fireEvent.click(rubricGroup().getByRole('button', { name: 'Add standard rubric' }));
+    const lowest = rubricGroup().getByRole('spinbutton', { name: 'Lowest score' });
+    fireEvent.change(lowest, { target: { value: '4' } });
+    expect(lowest).toHaveAccessibleDescription(
+      'The lowest score (4) is not below the highest (4).',
+    );
+    expect(state().config.format.rubric?.scale).toEqual({ min: 1, max: 4 });
+  });
+
+  it('removes the rubric, after asking, when no step scores on it', () => {
+    const { state } = renderSetup({ tab: 'format' });
+    fireEvent.click(rubricGroup().getByRole('button', { name: 'Add standard rubric' }));
+    fireEvent.click(rubricGroup().getByRole('button', { name: 'Remove rubric' }));
+    expect(rubricGroup().getByText('Remove the rubric with all its criteria?')).toBeInTheDocument();
+    fireEvent.click(rubricGroup().getByRole('button', { name: 'Remove rubric' }));
+    expect(Object.hasOwn(state().config.format, 'rubric')).toBe(false);
+    expect(rubricGroup().getByRole('button', { name: 'Add standard rubric' })).toHaveFocus();
+  });
+
+  it('does not reuse the id of a criterion with scores for a new one', () => {
+    const config = graffitiWithJury();
+    const rubric = config.format.rubric;
+    if (rubric === undefined) throw new Error('no rubric');
+    const debate = newDebate('d1', 't1', config.format);
+    renderSetup({
+      tab: 'format',
+      initial: {
+        config: {
+          ...config,
+          format: {
+            ...config.format,
+            rubric: { ...rubric, criteria: rubric.criteria.slice(0, 1) },
+          },
+        },
+        session: {
+          current: null,
+          debates: [
+            {
+              ...debate,
+              jury: {
+                jurors: [{ id: 'j1', name: '', scores: { pro: { c1: 3 } } }],
+                current: 'j1',
+              },
+            },
+          ],
+        },
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Change the format anyway' }));
+    fireEvent.click(rubricGroup().getByRole('button', { name: 'Add criterion' }));
+    expect(criterion(2).getByRole('textbox', { name: 'Name' })).toHaveValue('New criterion');
+    expect(criterion(2).getByRole('textbox', { name: 'Name' }).id).toMatch(/-c2-label$/);
   });
 });

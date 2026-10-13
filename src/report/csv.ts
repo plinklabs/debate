@@ -7,12 +7,14 @@
 // locale then opens it without an import dialog.
 //
 // The columns follow the format: a group of columns for each step, in order,
-// and the prep time of each team when the format has a bank.
+// and the prep time of each team when the format has a bank. The jury step's
+// group holds the scores (#10).
 
 import { stepName } from '../debate/stepText';
 import { DICTIONARIES, translator, type Translate } from '../i18n/dictionary';
 import { formatNumber } from '../i18n/format';
-import { SIDES, stepSide, type Format, type Side, type Step } from '../model/config';
+import { SIDES, stepSide, type Format, type Rubric, type Side, type Step } from '../model/config';
+import { hasScored } from '../model/jury';
 import type { Locale } from '../model/locale';
 import type { AppState } from '../model/reducer';
 import {
@@ -22,6 +24,7 @@ import {
   type DebateResult,
   type MemberResult,
   type Report,
+  type ScoredResult,
   type StepResult,
 } from '../model/report';
 
@@ -42,6 +45,8 @@ interface Context {
   readonly t: Translate;
   readonly locale: Locale;
   readonly format: Format;
+  /** Every debate in the file: some columns depend on all of them. */
+  readonly debates: readonly DebateResult[];
 }
 
 /** Quoted when it holds the separator, a quote or a line break. */
@@ -69,7 +74,7 @@ export function reportCsv(
 export function csvOf(report: Report, locale: Locale): string {
   const t = translator(DICTIONARIES[locale]);
   const { format } = report;
-  const c: Context = { t, locale, format };
+  const c: Context = { t, locale, format, debates: report.debates };
   const columns: Column[] = [
     { header: t('csv.debate'), cell: ({ debate }) => String(debate.number) },
     {
@@ -125,8 +130,7 @@ function stepNames({ t, format }: Context): string[] {
 
 /**
  * The columns of one step, headed with `name` (`stepNames`). The switch covers
- * every kind of step: a new kind, or a jury step with scores (#10), needs its
- * columns here.
+ * every kind of step: a new kind needs its columns here.
  */
 function stepColumns(step: Step, index: number, name: string, c: Context): Column[] {
   const { t, format } = c;
@@ -230,7 +234,60 @@ function stepColumns(step: Step, index: number, name: string, c: Context): Colum
         },
       ];
     }
+    case 'jury':
+      return format.rubric === undefined ? [] : juryColumns(format.rubric, index, name, c);
   }
+}
+
+/**
+ * The jury's scores of the row's team, or of the row's student when the
+ * rubric scores students: each criterion and the weighted total, averaged
+ * over the jurors who scored; how many did; and each juror's own total, by
+ * their place on the jury, as far as the largest jury in the file goes.
+ */
+function juryColumns(rubric: Rubric, index: number, name: string, c: Context): Column[] {
+  const { t, locale } = c;
+  const scoredOf = ({ debate, side, member }: Row): ScoredResult | null => {
+    const result = debate.steps[index];
+    if (result.type !== 'jury') return null;
+    const found = result.scored.find(
+      (scored) =>
+        scored.side === side && (scored.member === null || scored.member.slot === member?.slot),
+    );
+    return found ?? null;
+  };
+  const value = (score: number | null | undefined) =>
+    score === null || score === undefined ? '' : average(score, locale);
+  const largest = Math.max(
+    0,
+    ...c.debates.flatMap((debate) => {
+      const result = debate.steps[index];
+      return result.type === 'jury' ? result.jurors.map((juror) => juror.number) : [];
+    }),
+  );
+  return [
+    ...rubric.criteria.map((criterion, at): Column => ({
+      header: t('csv.score', { step: name, criterion: criterion.label }),
+      cell: (row) => value(scoredOf(row)?.average.scores[at]),
+    })),
+    { header: t('csv.total', { step: name }), cell: (row) => value(scoredOf(row)?.average.total) },
+    {
+      header: t('csv.jurors', { step: name }),
+      cell: (row) => {
+        const scored = scoredOf(row);
+        return scored === null ? '' : String(scored.sheets.filter(hasScored).length);
+      },
+    },
+    ...Array.from({ length: largest }, (_, at): Column => ({
+      header: t('csv.jurorTotal', { step: name, number: at + 1 }),
+      cell: (row) => {
+        const result = row.debate.steps[index];
+        if (result.type !== 'jury') return '';
+        const juror = result.jurors.findIndex((candidate) => candidate.number === at + 1);
+        return juror < 0 ? '' : value(scoredOf(row)?.sheets[juror]?.total);
+      },
+    })),
+  ];
 }
 
 /**
@@ -278,6 +335,11 @@ function voteColumns(format: Format, header: (side: string) => string, index: nu
         : '';
     },
   }));
+}
+
+/** A score or an average: up to two decimals, with the language's decimal sign and no grouping. */
+function average(value: number, locale: Locale): string {
+  return formatNumber(locale, value, { maximumFractionDigits: 2, useGrouping: false });
 }
 
 /** One decimal, with the language's decimal sign and no grouping; never `-0.0`. */

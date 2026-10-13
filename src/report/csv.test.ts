@@ -2,8 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import type { DebateConfig } from '../model/config';
 import { GRAFFITI_PRESET } from '../model/presets';
-import type { AppState } from '../model/reducer';
-import { playedPopperSession, playedSession } from '../test/playedSession';
+import { reducer, type Action, type AppState } from '../model/reducer';
+import { playedJurySession, playedPopperSession, playedSession } from '../test/playedSession';
 import { csvField, csvText, reportCsv } from './csv';
 
 function csv(state: AppState = playedSession(), locale: 'en' | 'nl' = 'en') {
@@ -305,5 +305,91 @@ describe('the CSV of a Karl Popper debate (#8)', () => {
   it('has no prep-time columns for a format without a bank', () => {
     const [header] = table(csv());
     expect(header.filter((name) => name.startsWith('Prep time'))).toEqual([]);
+  });
+});
+
+describe('the CSV of a debate with a jury (#10)', () => {
+  const JURY = [
+    'Jury: Content and arguments',
+    'Jury: Rebuttal',
+    'Jury: Evidence and examples',
+    'Jury: Delivery',
+    'Jury: total',
+    'Jury: jurors',
+    'Jury: total juror 1',
+    'Jury: total juror 2',
+  ];
+
+  /** The jury columns of each row, by student. */
+  function scores(text: string) {
+    return records(text).map((row) => [row.Student, ...JURY.map((column) => row[column])]);
+  }
+
+  it('gives each row its team’s scores, averaged over the jurors, before whether it is finished', () => {
+    const text = csv(playedJurySession());
+    expect(table(text)[0].slice(-9)).toEqual([...JURY, 'Finished']);
+    expect(scores(text)).toEqual([
+      ['Ann', '3.5', '2.5', '3.5', '3.5', '13', '2', '12', '14'],
+      ['Bert', '3.5', '2.5', '3.5', '3.5', '13', '2', '12', '14'],
+      ['Dirk', '2.5', '3', '2.5', '2', '10', '2', '10', '10'],
+      ['Eva', '2.5', '3', '2.5', '2', '10', '2', '10', '10'],
+    ]);
+  });
+
+  it('is written in Dutch, with a decimal comma', () => {
+    const [header, ann] = table(csv(playedJurySession(), 'nl'));
+    expect(header.slice(-9)).toEqual([
+      'Juryoordeel: Content and arguments',
+      'Juryoordeel: Rebuttal',
+      'Juryoordeel: Evidence and examples',
+      'Juryoordeel: Delivery',
+      'Juryoordeel: totaal',
+      'Juryoordeel: juryleden',
+      'Juryoordeel: totaal jurylid 1',
+      'Juryoordeel: totaal jurylid 2',
+      'Afgerond',
+    ]);
+    expect(ann.slice(-9)).toEqual(['3,5', '2,5', '3,5', '3,5', '13', '2', '12', '14', 'ja']);
+  });
+
+  it('gives each student their own scores when the rubric scores students', () => {
+    const state = playedJurySession();
+    const rubric = state.config.format.rubric;
+    if (rubric === undefined) throw new Error('no rubric');
+    const config: DebateConfig = {
+      ...state.config,
+      format: { ...state.config.format, rubric: { ...rubric, scope: 'student' } },
+    };
+    const scored: Action[] = [
+      { type: 'open-debate', debateId: 'd1', now: 0 },
+      { type: 'select-juror', jurorId: 'j2' },
+      ...[4, 4, 3, 3].map((score, index): Action => ({
+        type: 'set-score',
+        jurorId: 'j2',
+        target: { side: 'con', slot: 1 },
+        criterionId: rubric.criteria[index].id,
+        score,
+      })),
+    ];
+    const text = csv(scored.reduce(reducer, { ...state, config }));
+    // Only juror 2 scored a student; the columns go by their number on the jury.
+    expect(scores(text)).toEqual([
+      ['Ann', '', '', '', '', '', '0', '', ''],
+      ['Bert', '', '', '', '', '', '0', '', ''],
+      ['Dirk', '', '', '', '', '', '0', '', ''],
+      ['Eva', '4', '4', '3', '3', '14', '1', '', '14'],
+    ]);
+  });
+
+  it('leaves the scores empty when nobody scored, and has no columns of jurors', () => {
+    const state = playedJurySession();
+    const cleared: Action[] = [
+      { type: 'open-debate', debateId: 'd1', now: 0 },
+      { type: 'clear-step' },
+    ];
+    const text = csv(cleared.reduce(reducer, state));
+    expect(table(text)[0].slice(-7)).toEqual([...JURY.slice(0, 6), 'Finished']);
+    expect(records(text)[0]['Jury: total']).toBe('');
+    expect(records(text)[0]['Jury: jurors']).toBe('0');
   });
 });

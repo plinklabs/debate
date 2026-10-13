@@ -1,6 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
+import { playedJurySession } from '../test/playedSession';
 import type { DebateConfig } from './config';
+import { MAX_JURORS } from './jury';
 import { GRAFFITI_PRESET, KARL_POPPER_PRESET, PUBLIC_DEBATE_PRESET } from './presets';
 import {
   anyRunning,
@@ -10,7 +12,7 @@ import {
   type Action,
   type AppState,
 } from './reducer';
-import { NO_PREP, recordFor, type Debate } from './session';
+import { NO_JURY, NO_PREP, recordFor, type Debate } from './session';
 import {
   STORAGE_KEY,
   deserializeState,
@@ -41,7 +43,7 @@ function apply(state: AppState, ...actions: Action[]): AppState {
 
 function step(id: string) {
   const found = config.format.steps.find((candidate) => candidate.id === id);
-  if (found === undefined) throw new Error(`no step ${id}`);
+  if (found === undefined || found.type === 'jury') throw new Error(`no step ${id} with a record`);
   return found;
 }
 
@@ -219,6 +221,7 @@ describe('loading', () => {
           'vote-before': { type: 'vote-before', votes: { pro: 999, con: 0 } },
         },
         prep: NO_PREP,
+        jury: NO_JURY,
       },
     ]);
   });
@@ -349,5 +352,69 @@ describe('the steps and prep time of #8', () => {
         answers: { pro: 0, con: 3 },
       },
     });
+  });
+});
+
+describe('the jury of #10', () => {
+  it('comes back from a reload with its jurors, their names and scores, and the open sheet', () => {
+    const state = playedJurySession();
+    const restored = deserializeState(serializeState(state, 0), fallback);
+    expect(restored?.config).toEqual(state.config);
+    expect(restored?.session).toEqual(state.session);
+    expect(restored?.session.debates[0].jury.current).toBe('j2');
+  });
+
+  it('reads a debate stored before #10 as one without a jury', () => {
+    const raw = JSON.stringify({
+      version: 1,
+      config,
+      session: { debates: [{ id: 'd1', topicId: 't1', records: {} }], current: null },
+    });
+    expect(deserializeState(raw, fallback)?.session.debates[0].jury).toEqual(NO_JURY);
+  });
+
+  it('drops jurors and scores that do not fit, and keeps the rest', () => {
+    const raw = `{"version":1,"session":{"debates":[{"id":"d1","topicId":"t1","jury":{"current":"j7","jurors":[
+      {"id":"j1","name":"${'x'.repeat(50)}","scores":{
+        "pro":{"content":3,"rebuttal":2.5,"evidence":-1,"delivery":11,"__proto__":4,"-x":2},
+        "pro-0":{"content":"3"},
+        "con-9":{"content":1},
+        "__proto__":{"content":1},
+        "con":{"content":0,"delivery":10}}},
+      {"id":"j1","name":"Copy","scores":{}},
+      {"id":"../j2","scores":{"pro":{"content":1}}},
+      "j3",
+      {"id":"j4","name":7,"scores":[1,2]}
+    ]}}]}}`;
+    const debate = deserializeState(raw, fallback)?.session.debates[0];
+    expect(debate?.jury).toEqual({
+      jurors: [
+        {
+          id: 'j1',
+          name: 'x'.repeat(40),
+          scores: { pro: { content: 3 }, con: { content: 0, delivery: 10 } },
+        },
+        { id: 'j4', name: '', scores: {} },
+      ],
+      // A juror that is not there: the first one's sheet opens.
+      current: 'j1',
+    });
+    expect(Object.getPrototypeOf(debate?.jury.jurors[0].scores.pro)).toBe(Object.prototype);
+  });
+
+  it(`keeps ${MAX_JURORS} jurors at most`, () => {
+    const jurors = Array.from({ length: MAX_JURORS + 3 }, (_, index) => ({
+      id: `j${index + 1}`,
+      name: '',
+      scores: {},
+    }));
+    const raw = JSON.stringify({
+      version: 1,
+      config,
+      session: { debates: [{ id: 'd1', topicId: 't1', jury: { jurors, current: 'j13' } }] },
+    });
+    const jury = deserializeState(raw, fallback)?.session.debates[0].jury;
+    expect(jury?.jurors).toHaveLength(MAX_JURORS);
+    expect(jury?.current).toBe('j1');
   });
 });
